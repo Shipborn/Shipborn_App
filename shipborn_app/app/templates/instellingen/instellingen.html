@@ -1,0 +1,27 @@
+<section id="view-settings" hidden>
+  <form class="card instset" id="urenForm">
+    <h3>Urentellers</h3>
+    <p class="hint">Kies de sensoren in Home Assistant met de draaiuren. De stand wordt bij elke logregel vastgelegd, staat bovenaan de app en telt mee voor taken met een interval in uren.</p>
+    <div id="urenRijen"></div>
+    <div class="instbtns"><button type="submit" class="btn primary">Opslaan</button></div>
+  </form>
+
+  <div class="card instset" id="overzetten" hidden>
+    <h3>Overzetten uit de oude Logboek-app</h3>
+    <p class="hint">Neemt alle logregels, taken, categorieën, foto's en het logo over uit de vorige app (de oude gegevens blijven staan). Stop de oude app eerst, zodat er daar niets meer verandert.</p>
+    <div id="overzetInfo"></div>
+    <label class="check" id="overzetVervangen" hidden><input type="checkbox"> Huidige gegevens in deze app vervangen</label>
+    <div class="instbtns"><button type="button" class="btn primary" id="overzetKnop">Overzetten</button></div>
+  </div>
+
+  <div class="card instset">
+    <h3>Logo</h3>
+    <p class="hint">Staat bovenaan de app en bovenaan elke PDF. PNG met transparante achtergrond werkt het mooist.</p>
+    <div class="logoprev" id="logoPrev"><span class="hint">Nog geen logo</span></div>
+    <div class="instbtns">
+      <label class="btn primary" for="logoInput">Logo kiezen</label>
+      <input type="file" id="logoInput" class="vh" accept="image/*" tabindex="-1">
+      <button type="button" class="btn danger" id="logoDel" hidden>Verwijderen</button>
+    </div>
+  </div>
+</section>
