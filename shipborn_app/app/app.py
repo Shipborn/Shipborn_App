@@ -12,7 +12,6 @@ import json
 import logging
 import os
 import re
-import shutil
 import sqlite3
 import threading
 import time
@@ -20,7 +19,6 @@ import uuid
 from contextlib import contextmanager, nullcontext
 from datetime import date, datetime, timedelta, timezone
 from datetime import time as dt_time
-from pathlib import Path
 
 import smtplib
 import ssl
@@ -34,7 +32,7 @@ from fpdf.enums import XPos, YPos
 from flask import Flask, Response, abort, jsonify, render_template, request, send_from_directory
 from PIL import Image, ImageOps
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("shipborn")
@@ -42,7 +40,6 @@ log = logging.getLogger("shipborn")
 OPTIONS_FILE = os.environ.get("OPTIONS_FILE", "/data/options.json")
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 SHARE_DIR = os.environ.get("SHARE_DIR", "/share/shipborn")
-OUD_DIR = os.environ.get("OUD_DIR", "/share/logboek")   # oude Logboek-app, alleen om over te zetten
 HA_API = os.environ.get("HA_API", "http://supervisor/core/api")
 SUPERVISOR_API = os.environ.get("SUPERVISOR_API", "http://supervisor")
 SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN")
@@ -152,6 +149,25 @@ CREATE INDEX IF NOT EXISTS idx_entries_datum ON entries(datum);
 CREATE INDEX IF NOT EXISTS idx_entries_task ON entries(task_id);
 CREATE INDEX IF NOT EXISTS idx_photos_entry ON photos(entry_id);
 CREATE INDEX IF NOT EXISTS idx_values_entry ON entry_values(entry_id);
+-- lopende uitvoeringen van een stappenplan; bij Afronden worden ze een logregel
+CREATE TABLE IF NOT EXISTS uitvoeringen (
+    id INTEGER PRIMARY KEY,
+    task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    stappen TEXT NOT NULL,          -- kopie van het stappenplan bij de start
+    stap INTEGER NOT NULL DEFAULT 0,
+    notities TEXT,                  -- JSON-lijst, één opmerking per stap
+    gestart TEXT NOT NULL,
+    gestart_door TEXT,
+    bijgewerkt TEXT
+);
+CREATE TABLE IF NOT EXISTS uitvoering_fotos (
+    id INTEGER PRIMARY KEY,
+    uitvoering_id INTEGER NOT NULL REFERENCES uitvoeringen(id) ON DELETE CASCADE,
+    stap INTEGER NOT NULL,
+    bestand TEXT NOT NULL,
+    thumb TEXT NOT NULL,
+    created_at TEXT
+);
 """
 
 
@@ -816,6 +832,20 @@ def api_entries():
         return jsonify(entries_with_photos(conn, where, args))
 
 
+def nieuwe_logregel(conn, data):
+    """Logregel opslaan + meetwaarden vastleggen; geeft het id."""
+    cur = conn.execute(
+        "INSERT INTO entries (datum, categorie, titel, omschrijving, motoruren, generator_uren, kosten, "
+        "uitgevoerd_door, duur_minuten, task_id, created_at, updated_at, ingevoerd_door) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (data["datum"], data["categorie"], data["titel"], data["omschrijving"], data["motoruren"],
+         data["generator_uren"], data["kosten"], data["uitgevoerd_door"], data["duur_minuten"],
+         data["task_id"], now(), now(), current_user()),
+    )
+    capture_values(conn, cur.lastrowid, data["task_id"], data["categorie"])
+    return cur.lastrowid
+
+
 @app.post("/api/entries")
 def api_entry_create():
     data = entry_from_form(request.form)
@@ -824,17 +854,8 @@ def api_entry_create():
         data["motoruren"], data["generator_uren"] = uren["hoofdmotor"], uren["generator"]
     images = load_images(request.files.getlist("fotos"), request.form.getlist("foto_omschrijving"))
     with get_db() as conn:
-        cur = conn.execute(
-            "INSERT INTO entries (datum, categorie, titel, omschrijving, motoruren, generator_uren, kosten, "
-            "uitgevoerd_door, duur_minuten, task_id, created_at, updated_at, ingevoerd_door) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (data["datum"], data["categorie"], data["titel"], data["omschrijving"], data["motoruren"],
-             data["generator_uren"], data["kosten"], data["uitgevoerd_door"], data["duur_minuten"],
-             data["task_id"], now(), now(), current_user()),
-        )
-        eid = cur.lastrowid
+        eid = nieuwe_logregel(conn, data)
         save_images(conn, eid, images)
-        capture_values(conn, eid, data["task_id"], data["categorie"])
         result = entries_with_photos(conn, "WHERE e.id = ?", (eid,))[0]
     changed()
     return jsonify(result), 201
@@ -973,7 +994,10 @@ def api_task_update(tid):
             (d["naam"], d["categorie"], d["interval_dagen"], d["interval_uren"], d["interval_generator"],
              d["notitie"], d["actief"], d["entiteiten"], d["stappen"], tid),
         )
-    remove_files(*(stap_bestanden(old["stappen"]) - stap_bestanden(d["stappen"])))   # weggehaalde afbeeldingen
+        # weggehaalde afbeeldingen, behalve als een lopende uitvoering (kopie van het plan) ze nog toont
+        weg = stap_bestanden(old["stappen"]) - stap_bestanden(d["stappen"])
+        weg -= {f for (st,) in conn.execute("SELECT stappen FROM uitvoeringen") for f in stap_bestanden(st)}
+    remove_files(*weg)
     changed()
     return jsonify(ok=True)
 
@@ -984,8 +1008,11 @@ def api_task_delete(tid):
         old = conn.execute("SELECT stappen FROM tasks WHERE id = ?", (tid,)).fetchone()
         if not old:
             abort(404, "Taak niet gevonden")
-        conn.execute("DELETE FROM tasks WHERE id = ?", (tid,))
-    remove_files(*stap_bestanden(old["stappen"]))
+        run_fotos = [f for r in conn.execute(
+            "SELECT f.bestand, f.thumb FROM uitvoering_fotos f JOIN uitvoeringen u ON u.id = f.uitvoering_id "
+            "WHERE u.task_id = ?", (tid,)) for f in r]
+        conn.execute("DELETE FROM tasks WHERE id = ?", (tid,))   # lopende uitvoeringen gaan mee (cascade)
+    remove_files(*stap_bestanden(old["stappen"]), *run_fotos)
     if MQTT:
         MQTT.remove_task(tid)
     changed()
@@ -1102,121 +1129,147 @@ def api_instellingen_opslaan():
     return api_instellingen()
 
 
-# --------------------------------------------------------------------------- overzetten uit de oude Logboek-app
-# De oude app (slug logboek) zette een kopie van zijn database in /share/logboek/backup/logboek.db en de
-# foto's plat in /share/logboek/photos. Overzetten kopieert die naar de nieuwe structuur; het origineel blijft.
+# --------------------------------------------------------------------------- uitvoeringen van stappenplannen
+# Een uitvoering wordt bij elke stap, opmerking en foto direct opgeslagen, zodat hij na herladen of op een
+# ander apparaat verder kan. Er kunnen meerdere tegelijk lopen (één per taak). Afronden maakt er een logregel van.
 
-OUD_DB = os.path.join(OUD_DIR, "backup", "logboek.db")
-OUD_FOTOS = os.path.join(OUD_DIR, "photos")
-
-
-def oud_overzicht():
-    """Wat er in de oude app staat, of None als er niets te vinden is."""
-    if not os.path.exists(OUD_DB):
-        return None
-    src = sqlite3.connect(Path(OUD_DB).resolve().as_uri() + "?mode=ro&immutable=1", uri=True)
-    try:
-        n = {t: src.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-             for t in ("entries", "tasks", "categories", "photos")}
-    finally:
-        src.close()
-    bijgewerkt = datetime.fromtimestamp(os.path.getmtime(OUD_DB), timezone.utc).isoformat(timespec="seconds")
-    return {"logregels": n["entries"], "taken": n["tasks"], "categorieen": n["categories"], "fotos": n["photos"],
-            "bijgewerkt": bijgewerkt, "pad": OUD_DIR}
-
-
-def nieuw_leeg(conn):
-    return conn.execute("SELECT (SELECT COUNT(*) FROM entries) + (SELECT COUNT(*) FROM tasks)").fetchone()[0] == 0
-
-
-def kopieer_oud(naam, rel_map, telling):
-    """Bestand uit de oude fotomap naar <rel_map>/<naam>; geeft het nieuwe relatieve pad."""
-    if not naam:
-        return None
-    naam = os.path.basename(naam)
-    rel = f"{rel_map}/{naam}"
-    bron = os.path.join(OUD_FOTOS, naam)
-    if os.path.exists(bron):
-        os.makedirs(os.path.join(SHARE_DIR, rel_map), exist_ok=True)
-        shutil.copy2(bron, os.path.join(SHARE_DIR, rel))
-        telling["gekopieerd"] += 1
-    else:
-        telling["ontbreekt"] += 1
-    return rel
-
-
-def bestanden_in(conn):
-    """Alle bestanden (foto's, originelen, uitlegafbeeldingen) waar een database naar verwijst."""
-    out = {f for p in conn.execute("SELECT bestand, thumb, origineel FROM photos") for f in p if f}
-    if "stappen" in {c[1] for c in conn.execute("PRAGMA table_info(tasks)")}:
-        out |= {f for (st,) in conn.execute("SELECT stappen FROM tasks") for f in stap_bestanden(st)}
+def uitvoeringen_json(conn, where="", args=()):
+    rows = conn.execute("SELECT u.*, t.naam AS taak, t.categorie FROM uitvoeringen u "
+                        f"JOIN tasks t ON t.id = u.task_id {where} ORDER BY u.gestart, u.id", args).fetchall()
+    fotos = {}
+    for f in conn.execute("SELECT * FROM uitvoering_fotos ORDER BY id"):
+        fotos.setdefault(f["uitvoering_id"], []).append(
+            {"id": f["id"], "stap": f["stap"], "bestand": f["bestand"], "thumb": f["thumb"]})
+    out = []
+    for r in rows:
+        stappen = json.loads(r["stappen"])
+        notities = (json.loads(r["notities"] or "[]") + [""] * len(stappen))[:len(stappen)]
+        out.append({"id": r["id"], "task_id": r["task_id"], "taak": r["taak"], "categorie": r["categorie"],
+                    "stappen": stappen, "stap": r["stap"], "notities": notities, "gestart": r["gestart"],
+                    "gestart_door": r["gestart_door"], "fotos": fotos.get(r["id"], [])})
     return out
 
 
-def overzetten():
-    """Database en bestanden van de oude app overnemen; vervangt alles in de nieuwe app."""
-    tmp = DB_PATH + ".overzetten"
-    with BACKUP_LOCK:
-        src = sqlite3.connect(Path(OUD_DB).resolve().as_uri() + "?mode=ro&immutable=1", uri=True)
-        dst = sqlite3.connect(tmp)
-        with dst:
-            src.backup(dst)
-        src.close()
-        dst.row_factory = sqlite3.Row
-        telling = {"gekopieerd": 0, "ontbreekt": 0}
-        with dst:
-            for r in dst.execute("SELECT p.id, p.bestand, p.thumb, p.origineel, p.created_at, e.datum "
-                                 "FROM photos p LEFT JOIN entries e ON e.id = p.entry_id").fetchall():
-                maand = "fotos/" + (r["created_at"] or r["datum"] or now())[:7].replace("-", "/")   # 2026-10 → 2026/10
-                dst.execute("UPDATE photos SET bestand = ?, thumb = ?, origineel = ? WHERE id = ?",
-                            (kopieer_oud(r["bestand"], maand, telling), kopieer_oud(r["thumb"], maand, telling),
-                             kopieer_oud(r["origineel"], maand, telling), r["id"]))
-            if "stappen" in {c["name"] for c in dst.execute("PRAGMA table_info(tasks)")}:
-                for t in dst.execute("SELECT id, stappen FROM tasks WHERE stappen IS NOT NULL").fetchall():
-                    stappen = json.loads(t["stappen"] or "[]")
-                    for st in stappen:
-                        st["afbeeldingen"] = [{k: kopieer_oud(a[k], "stappenplannen", telling) for k in ("bestand", "thumb")}
-                                              for a in st.get("afbeeldingen", [])]
-                    dst.execute("UPDATE tasks SET stappen = ? WHERE id = ?",
-                                (json.dumps(stappen, ensure_ascii=False), t["id"]))
-        # de huidige database in één keer vervangen (backup-API: veilig, ook met WAL-bestanden);
-        # bestanden van de huidige gegevens die niet in de overgezette zitten, daarna opruimen
-        with get_db() as conn:
-            weg = bestanden_in(conn) - bestanden_in(dst)
-            dst.backup(conn)
-        dst.close()
-        os.remove(tmp)
-    remove_files(*weg)
-    oud_logo = os.path.join(OUD_DIR, "logo.png")
-    if os.path.exists(oud_logo) and not os.path.exists(LOGO_PATH):
-        shutil.copy2(oud_logo, LOGO_PATH)
-    init_db()   # schema bijwerken als de oude app een oudere versie was
-    return telling
+def uitvoering(conn, uid):
+    lijst = uitvoeringen_json(conn, "WHERE u.id = ?", (uid,))
+    if not lijst:
+        abort(404, "Uitvoering niet gevonden (al afgerond of afgebroken?)")
+    return lijst[0]
 
 
-@app.get("/api/overzetten")
-def api_overzetten_info():
+@app.get("/api/uitvoeringen")
+def api_uitvoeringen():
     with get_db() as conn:
-        leeg = nieuw_leeg(conn)
-    return jsonify(oud=oud_overzicht(), leeg=leeg)
+        return jsonify(uitvoeringen_json(conn))
 
 
-@app.post("/api/overzetten")
-def api_overzetten():
-    vervangen = bool((request.get_json(force=True) or {}).get("vervangen"))
-    if not oud_overzicht():
-        abort(400, f"Geen gegevens van de oude Logboek-app gevonden in {OUD_DIR}")
+@app.post("/api/uitvoeringen")
+def api_uitvoering_start():
+    """Stappenplan van een taak starten: {task_id}. Loopt er al een voor deze taak, dan die."""
+    tid = int(num((request.get_json(force=True) or {}).get("task_id")) or 0)
     with get_db() as conn:
-        if not nieuw_leeg(conn) and not vervangen:
-            abort(400, "De nieuwe app heeft al logregels of taken; vink 'vervangen' aan om ze te overschrijven")
-    telling = overzetten()
-    log.info("Overgezet uit %s: %s", OUD_DIR, telling)
-    if MQTT:
-        MQTT.known = set()
+        bestaand = conn.execute("SELECT id FROM uitvoeringen WHERE task_id = ?", (tid,)).fetchone()
+        if bestaand:
+            return jsonify(uitvoering(conn, bestaand["id"]))
+        t = conn.execute("SELECT stappen FROM tasks WHERE id = ?", (tid,)).fetchone()
+        if not t:
+            abort(404, "Taak niet gevonden")
+        if not json.loads(t["stappen"] or "[]"):
+            abort(400, "Deze taak heeft geen stappenplan")
+        cur = conn.execute("INSERT INTO uitvoeringen (task_id, stappen, stap, notities, gestart, gestart_door, "
+                           "bijgewerkt) VALUES (?,?,0,'[]',?,?,?)", (tid, t["stappen"], now(), current_user(), now()))
+        result = uitvoering(conn, cur.lastrowid)
     changed()
+    return jsonify(result), 201
+
+
+@app.put("/api/uitvoeringen/<int:uid>")
+def api_uitvoering_bijwerken(uid):
+    """Huidige stap en/of opmerkingen opslaan: {stap, notities}."""
+    d = request.get_json(force=True) or {}
     with get_db() as conn:
-        n = {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in ("entries", "tasks", "categories")}
-    return jsonify(logregels=n["entries"], taken=n["tasks"], categorieen=n["categories"], **telling)
+        u = uitvoering(conn, uid)
+        if "stap" in d:
+            stap = int(num(d["stap"]) or 0)
+            if not 0 <= stap < len(u["stappen"]):
+                abort(400, "Ongeldige stap")
+            conn.execute("UPDATE uitvoeringen SET stap = ? WHERE id = ?", (stap, uid))
+        if "notities" in d:
+            notities = [str(n or "")[:4000] for n in (d["notities"] or [])][:len(u["stappen"])]
+            conn.execute("UPDATE uitvoeringen SET notities = ? WHERE id = ?", (json.dumps(notities, ensure_ascii=False), uid))
+        conn.execute("UPDATE uitvoeringen SET bijgewerkt = ? WHERE id = ?", (now(), uid))
+        return jsonify(uitvoering(conn, uid))
+
+
+@app.post("/api/uitvoeringen/<int:uid>/fotos")
+def api_uitvoering_foto(uid):
+    """Uitvoeringsfoto bij een stap (form: foto, stap); komt bij Afronden in de logregel."""
+    images = load_images(request.files.getlist("foto"))
+    if not images:
+        abort(400, "Geen foto ontvangen")
+    with get_db() as conn:
+        u = uitvoering(conn, uid)
+        stap = int(num(request.form.get("stap")) or 0)
+        if not 0 <= stap < len(u["stappen"]):
+            abort(400, "Ongeldige stap")
+        bestand, thumb = write_photo(images[0][0])
+        cur = conn.execute("INSERT INTO uitvoering_fotos (uitvoering_id, stap, bestand, thumb, created_at) "
+                           "VALUES (?,?,?,?,?)", (uid, stap, bestand, thumb, now()))
+        conn.execute("UPDATE uitvoeringen SET bijgewerkt = ? WHERE id = ?", (now(), uid))
+    return jsonify(id=cur.lastrowid, stap=stap, bestand=bestand, thumb=thumb), 201
+
+
+@app.delete("/api/uitvoeringen/<int:uid>/fotos/<int:fid>")
+def api_uitvoering_foto_weg(uid, fid):
+    with get_db() as conn:
+        f = conn.execute("SELECT * FROM uitvoering_fotos WHERE id = ? AND uitvoering_id = ?", (fid, uid)).fetchone()
+        if not f:
+            abort(404, "Foto niet gevonden")
+        conn.execute("DELETE FROM uitvoering_fotos WHERE id = ?", (fid,))
+    remove_files(f["bestand"], f["thumb"])
+    return jsonify(ok=True)
+
+
+@app.delete("/api/uitvoeringen/<int:uid>")
+def api_uitvoering_afbreken(uid):
+    with get_db() as conn:
+        uitvoering(conn, uid)
+        fotos = [f for r in conn.execute("SELECT bestand, thumb FROM uitvoering_fotos WHERE uitvoering_id = ?", (uid,))
+                 for f in r]
+        conn.execute("DELETE FROM uitvoeringen WHERE id = ?", (uid,))
+    remove_files(*fotos)
+    changed()
+    return jsonify(ok=True)
+
+
+@app.post("/api/uitvoeringen/<int:uid>/afronden")
+def api_uitvoering_afronden(uid):
+    """Logregel bij de taak maken met alle foto's (omschrijving "Stap n – titel"), de opmerkingen per stap
+    en de bestede tijd vanaf de start; de uitvoering verdwijnt."""
+    uren = engine_hours()
+    with get_db() as conn:
+        u = uitvoering(conn, uid)
+        stappen = u["stappen"]
+        for i, st in enumerate(stappen):
+            n = sum(1 for f in u["fotos"] if f["stap"] == i)
+            if st.get("fotos") == "verplicht" and n < st.get("min_fotos", 1):
+                abort(400, f"Stap {i + 1} ({st['titel']}) heeft nog niet genoeg foto's")
+        opm = [f"Stap {i + 1} – {st['titel']}: {u['notities'][i].strip()}"
+               for i, st in enumerate(stappen) if u["notities"][i].strip()]
+        minuten = max(1, round((datetime.now(timezone.utc) - parse_stamp(u["gestart"])).total_seconds() / 60))
+        eid = nieuwe_logregel(conn, {
+            "datum": datetime.now(local_tz()).date().isoformat(), "categorie": u["categorie"], "titel": u["taak"],
+            "omschrijving": "\n".join([f"Uitgevoerd volgens stappenplan ({len(stappen)} "
+                                       f"{'stap' if len(stappen) == 1 else 'stappen'})."] + opm),
+            "motoruren": uren["hoofdmotor"], "generator_uren": uren["generator"], "kosten": None,
+            "uitgevoerd_door": None, "duur_minuten": minuten, "task_id": u["task_id"]})
+        for f in u["fotos"]:   # bestanden blijven waar ze staan, alleen de koppeling verhuist
+            conn.execute("INSERT INTO photos (entry_id, bestand, thumb, omschrijving, created_at) VALUES (?,?,?,?,?)",
+                         (eid, f["bestand"], f["thumb"], f"Stap {f['stap'] + 1} – {stappen[f['stap']]['titel']}", now()))
+        conn.execute("DELETE FROM uitvoeringen WHERE id = ?", (uid,))
+        result = entries_with_photos(conn, "WHERE e.id = ?", (eid,))[0]
+    changed()
+    return jsonify(result), 201
 
 
 def category_name_from_json():

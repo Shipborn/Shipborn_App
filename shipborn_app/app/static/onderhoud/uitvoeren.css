@@ -1,6 +1,12 @@
 /* Onderhoud › Taken › Uitvoeren */
 #procDlg{width:min(760px,calc(100vw - 20px))}
+#procDlg .dhead .btn{padding:4px 10px;font-size:13px}
+#procMin{font-size:28px;font-weight:700}
 #procDlg .dfoot{align-items:center}
+/* wisselen tussen lopende uitvoeringen */
+.procwissel{display:flex;gap:6px;padding:8px 16px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.procwissel button{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:4px 12px;font-size:13px;white-space:nowrap;cursor:pointer;color:var(--muted)}
+.procwissel button.nu{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:600}
 .procvoortgang{display:flex;gap:4px;margin-bottom:12px}
 .procvoortgang span{flex:1;height:5px;border-radius:3px;background:var(--line)}
 .procvoortgang .klaar{background:var(--ok)}
@@ -23,3 +29,9 @@
 .procnotitie{margin-top:12px}
 .procnotitie textarea{min-height:60px}
 #procTekort{color:var(--bad);margin-top:4px}
+/* balk onderin met geminimaliseerde uitvoeringen (naast de +-knop) */
+.rundock{position:fixed;left:12px;right:86px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:6;display:flex;gap:6px;flex-wrap:wrap-reverse;pointer-events:none}
+.rundock button{pointer-events:auto;display:flex;align-items:center;gap:8px;max-width:100%;border:0;border-radius:12px;padding:9px 14px;background:var(--fg);color:var(--bg);font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.25);cursor:pointer;text-align:left}
+.rundock button .n{opacity:.7;font-weight:400;white-space:nowrap}
+.rundock button .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.met-dock main{padding-bottom:170px}

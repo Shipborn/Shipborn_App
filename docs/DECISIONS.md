@@ -33,3 +33,11 @@
 - **Overzetten handmatig via een knop** (wens gebruiker: enige gebruiker, en er wordt ook van app gewisseld). Bron is de databasekopie die de oude app al in `/share/logboek/backup` bijhield; de nieuwe app kan niet in de `/data` van de oude. Kopiëren, niet verplaatsen: de oude app blijft werken tot hij verwijderd wordt.
 - **Nieuwe MQTT-namen (`shipborn_…`)** (wens gebruiker): oude en nieuwe app botsen niet; automatiseringen op de oude sensoren moeten worden aangepast.
 - Optie `engine_hours_entity` vervalt in de nieuwe app; urentellers staan in Instellingen.
+
+## Parallelle uitvoeringen (1.1.0)
+- **Uitvoeringen op de server** (wens gebruiker): meerdere tegelijk, minimaliseren en wisselen, en ze overleven herladen (de HA-app op de telefoon herlaadt vaak) en zijn op een ander apparaat te hervatten. Foto's gaan direct naar `fotos/<jjjj>/<mm>`, zodat Afronden alleen de koppeling verplaatst.
+- **Kopie van het stappenplan per uitvoering**: wijzigen van de taak tijdens een uitvoering verschuift de stappen niet.
+- **Eén uitvoering per taak**: nogmaals Uitvoeren opent de lopende.
+- **Taken zonder stappenplan** houden de gewone logregeldialoog (wens gebruiker), ook om achteraf een oude datum te loggen.
+- **Duur = wandkloktijd** van start tot Afronden, ook als de uitvoering geminimaliseerd was; aan te passen in de logregel.
+- **Overzet-functie verwijderd** (wens gebruiker): de overstap is gedaan en er zijn geen gebruikers meer op de oude app.

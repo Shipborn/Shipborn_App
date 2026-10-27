@@ -50,13 +50,18 @@ function renderTasks() {
     : leeg('Nog geen onderhoudstaken.<br>Voeg terugkerend onderhoud toe, zoals olie verversen of impeller vervangen.');
 }
 
-const uitvoerLabel = t => t.stappen.length ? 'Uitvoeren ›' : 'Uitgevoerd';
+// lopende uitvoeringen (uitvoeren.js); een taak die loopt krijgt "Verder ›"
+let LOPEND = [];
+op('uitvoeringen', runs => { LOPEND = runs; renderTasks(); });
+const lopend = t => LOPEND.find(r => r.task_id === t.id);
+const uitvoerLabel = t => lopend(t) ? 'Verder ›' : t.stappen.length ? 'Uitvoeren ›' : 'Uitgevoerd';
+const lopendChip = t => { const r = lopend(t); return r ? chip(`▶ bezig, stap ${r.stap + 1}/${r.stappen.length}`) : ''; };
 
 const taskCard = t => `
   <article class="card s-${t.status}" data-id="${t.id}">
     <div class="taskrow">
       <div class="grow">
-        <div class="meta">${statusHtml(t)} ${chip(t.categorie)} ${chip(t.stappen.length && meervoud(t.stappen.length, 'stap', 'stappen'))}
+        <div class="meta">${statusHtml(t)} ${chip(t.categorie)} ${chip(t.stappen.length && meervoud(t.stappen.length, 'stap', 'stappen'))} ${lopendChip(t)}
           ${pdfKnop(`api/pdf/task/${t.id}`, 'PDF van deze taak met alle uitvoeringen', true)}</div>
         <h3>${esc(t.naam)}</h3>
         <div class="due">Volgende: ${dueText(t)}</div>
@@ -68,7 +73,7 @@ const taskCard = t => `
   </article>`;
 
 // met stappenplan: stap voor stap uitvoeren; zonder: direct een logregel
-const taakUitgevoerd = t => t.stappen.length ? openUitvoeren(t)
+const taakUitgevoerd = t => t.stappen.length || lopend(t) ? openUitvoeren(t)
   : openEntry(null, {task_id: t.id, titel: t.naam, categorie: t.categorie});
 
 $('#tasks').addEventListener('click', ev => {

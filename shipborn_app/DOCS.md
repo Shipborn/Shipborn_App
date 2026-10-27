@@ -13,19 +13,6 @@ Eén paneel in de Home Assistant-zijbalk met modules voor je boot. Bovenin kies 
 2. Installeer **Shipborn App**. De eerste build duurt een paar minuten.
 3. Stel de opties in (zie hieronder) en klik op **Starten**. Zet **Weergeven in zijbalk** aan.
 
-## Overstappen van de oude Logboek-app
-
-De Shipborn App is een nieuwe app naast de oude **Logboek**-app (repository `Shipborn/ha-logboek`). Je gegevens zet je één keer zelf over:
-
-1. Neem de **opties** van de oude app over (titel, e-mail/SMTP, MQTT): die gaan niet automatisch mee.
-2. **Stop** de oude Logboek-app, zodat daar niets meer verandert.
-3. Open de Shipborn App › **Instellingen › Overzetten uit de oude Logboek-app** en klik op **Overzetten**. Alle logregels, taken (met stappenplannen), categorieën, meetwaarden, foto's en het logo worden gekopieerd naar de nieuwe structuur. De oude gegevens in `/share/logboek` blijven staan.
-4. Controleer **Instellingen › Urentellers** (bij een oude app vanaf 0.16.0 gaan ze mee, anders kies je ze hier opnieuw).
-5. De sensoren in Home Assistant krijgen nieuwe namen (apparaat **Shipborn App**, unique_id's `shipborn_…`). Pas automatiseringen en dashboards aan die de oude `logboek`-sensoren gebruikten.
-6. Alles in orde? Verwijder dan de oude app en, als je wilt, de map `/share/logboek`.
-
-Heb je in de nieuwe app al iets ingevoerd, dan moet je **Huidige gegevens in deze app vervangen** aanvinken; die gegevens worden dan overschreven.
-
 ## Opties
 
 | Optie | Uitleg |
@@ -50,7 +37,8 @@ Het logboek is voor **alle gebruikers** van Home Assistant beschikbaar, ook zond
 - **Logboek**: tik op **+** voor een nieuwe logregel. Met **Foto maken** open je de camera, met **Uit galerij** kies je bestaande foto's (ook meerdere tegelijk). Foto's worden op de telefoon al verkleind, zodat het uploaden snel gaat. Met de blauwe ✎ op een foto open je de **foto-editor**: vrij tekenen, pijlen, lijnen, rechthoeken, cirkels en tekst, in zes kleuren en drie diktes, met ongedaan maken. Bij een opgeslagen foto blijft het origineel bewaard; met **Origineel herstellen** haal je alle tekeningen weer weg. Naast elke foto kun je een omschrijving typen; die staat onder de foto als je hem groot bekijkt, en in de dagmail en de CSV-export. Tik op een regel om hem te bewerken. Tik op een foto om hem groot te bekijken. Bij **Bestede tijd** vul je in hoe lang het werk duurde, bijvoorbeeld `1:30` of `1,5` (uur) of `45 min`. Elke logregel toont ook wanneer hij is opgeslagen.
 - **Onderhoud › Taken**: terugkerend onderhoud. Een taak kan een interval hebben in dagen, in uren van de hoofdmotor en/of in uren van de generator; wat het eerst bereikt is, telt. Met **Uitgevoerd** maak je een logregel aan die aan de taak gekoppeld is, en daarmee starten de tellers opnieuw. Bij elke logregel worden de standen van beide urentellers vastgelegd.
 - **Stappenplan**: in **Taak bewerken › Stappenplan maken** zet je het onderhoud op als een reeks stappen. Per stap: een titel, uitleg (met **\*\*vet\*\***, *\*cursief\** en lijstjes met `-` of `1.`), uitlegafbeeldingen, en eventueel Home Assistant-entiteiten. Bij een entiteit kies je of hij in de stap **bediend** kan worden (aan/uit, of open/dicht bij kleppen) en of hij een bepaalde status **moet** hebben voordat je verder kunt (bijv. pomp uit, afsluiter dicht). Per stap stel je ook in of er tijdens het uitvoeren foto's gevraagd worden of **verplicht** zijn (met een minimum aantal). Stappen kun je toevoegen, verplaatsen en verwijderen.
-- Een taak met stappenplan heeft de knop **Uitvoeren**: je loopt stap voor stap door het plan. **Volgende** werkt pas als de voorwaarden kloppen en de verplichte foto's gemaakt zijn. Per stap kun je een opmerking typen. **Afronden** maakt automatisch een logregel bij de taak met alle foto's (met de stap erbij), de opmerkingen en de bestede tijd. Let op: tot Afronden staat alles alleen in de browser; sluit je de app tussendoor, dan ben je de uitvoering kwijt.
+- Een taak met stappenplan heeft de knop **Uitvoeren**: je loopt stap voor stap door het plan. **Volgende** werkt pas als de voorwaarden kloppen en de verplichte foto's gemaakt zijn. Per stap kun je een opmerking typen. **Afronden** maakt automatisch een logregel bij de taak met alle foto's (met de stap erbij), de opmerkingen en de bestede tijd (van start tot afronden).
+- **Meerdere taken tegelijk**: met **–** (of Esc) minimaliseer je een uitvoering; hij staat dan als balkje onderin het scherm (in elke module) met de taak en de stap. Tik erop om verder te gaan. Zo kun je een tweede of derde taak met stappenplan starten en ertussen wisselen, ook met de knoppen bovenin het uitvoervenster. Alles wordt direct opgeslagen: na herladen of op een ander apparaat staan de lopende uitvoeringen er nog. Met **Afbreken** stop je een uitvoering zonder logregel (foto's en opmerkingen worden weggegooid).
 - Tik op een taak voor de **geschiedenis**: alle keren dat hij is uitgevoerd, met de tussenpozen in dagen en motoruren, totale tijd, foto's en de notitie van de taak. Vanuit daar kun je een logregel openen, de taak bewerken of hem als uitgevoerd loggen. Oude logregels koppel je aan een taak door ze te bewerken en de taak te kiezen.
 - Een nieuwe taak staat op **Nog niet gelogd** tot je de eerste keer logt. Zet dan de datum van de laatste keer dat het onderhoud gedaan is.
 - **Categorieën**: tik op een categorie om al zijn logregels te zien, met de totale tijd. Daar kun je ook direct een nieuwe logregel in die categorie maken. Verder: toevoegen, hernoemen (bestaande logregels en taken gaan mee), volgorde aanpassen met ↑/↓ en verwijderen.

@@ -1,23 +1,22 @@
 # Status
 
-**Versie 1.0.0** (nieuwe app `shipborn_app`), werkmap `261027`. Op GitHub in de nieuwe repository `Shipborn/Shipborn_App` (main, 2026-10-27). De oude repository `Shipborn/ha-logboek` staat op 0.16.0 (commit `1f6d228`) en blijft zo.
+**Versie 1.1.0**, werkmap `261027_2`. Op GitHub (`Shipborn/Shipborn_App`, main). De oude repository `Shipborn/ha-logboek` staat op 0.16.0 en blijft zo, zonder verwijzing naar de nieuwe (besluit gebruiker).
 
 ## Gedaan
 - 0.14.0–0.16.0 (in `Shipborn/ha-logboek`): modules, frontend per tabblad, Onderhoud-module met urentellers en stappenplannen.
-- 1.0.0:
-  - Nieuwe slug `shipborn_app`, repository-URL `Shipborn/Shipborn_App`, MQTT-namen `shipborn_…`.
-  - Nieuwe opslag: `/data/shipborn.db` en `/share/shipborn/{fotos/<jjjj>/<mm>, stappenplannen, backup, logo.png}`; paden relatief in de database; de foto-route geeft alleen foto's vrij.
-  - **Instellingen › Overzetten uit de oude Logboek-app**: kopieert database, foto's (naar de nieuwe mapstructuur), uitlegafbeeldingen en logo uit `/share/logboek`; de oude map blijft ongewijzigd.
-- Lokaal getest met de testdata van 0.16 als "oude app": overzetten (9 bestanden, niets ontbrekend), foto's en miniaturen bereikbaar, back-up niet via de foto-URL op te vragen, nieuwe uploads in `fotos/2026/10`, foto bewerken/herstellen, uitlegafbeelding, weigering zonder "vervangen", opnieuw overzetten met "vervangen" (eigen bestanden opgeruimd, overgezette blijven), PDF en CSV, oude map onaangeroerd.
+- 1.0.0: nieuwe app `shipborn_app` in `Shipborn/Shipborn_App`, opslag per soort en per maand in `/share/shipborn`, overzetten uit de oude app. De gebruiker heeft de overstap in HA gedaan en meldt dat het goed werkt.
+- 1.1.0:
+  - **Parallelle uitvoeringen**: een stappenplan minimaliseren (– of Esc) naar een balk onderin, meerdere tegelijk, wisselen in het venster of via de balk; Taken toont "Verder ›" en de stap. Alles wordt direct op de server bewaard (stap, opmerkingen, foto's), dus herladen en een ander apparaat werken.
+  - Overzet-functie (knop + API) verwijderd.
+- Lokaal getest met nep-HA: twee uitvoeringen parallel, minimaliseren, wisselen, opmerking bewaard bij wisselen, herladen (beide terug in de balk), balk zichtbaar in andere modules, verplichte foto (knop én server weigeren), afronden (logregel met foto's per stap, opmerking, urenstanden), afbreken.
 
 ## Niet gedaan / niet getest
-- Niet getest in Home Assistant (installatie uit de nieuwe repository, overzetten met de echte `/share/logboek`, MQTT-sensoren). De echte oude app draait 0.13.1 of 0.16.0; overzetten uit 0.13.1 is alleen indirect getest (schema-migratie via `init_db`).
-- Niet getest op Android.
-- Een lopende uitvoering van een stappenplan wordt niet bewaard; het stappenplan staat niet in de taak-PDF; ongebruikte geüploade uitlegafbeeldingen blijven staan.
+- 1.1.0 niet getest in Home Assistant en niet op Android (camera in de pagina bij uitvoeren, gedrag van de balk in de HA-app).
+- Twee apparaten tegelijk in dezelfde uitvoering: laatste schrijfactie wint; een opmerking die op het ene apparaat getypt wordt kan die van het andere overschrijven.
+- De duur is de wandkloktijd van start tot afronden (ook geminimaliseerde tijd).
+- Het stappenplan staat niet in de taak-PDF; ongebruikte geüploade uitlegafbeeldingen blijven staan.
 - `voorbeeld/` (voorbeeld-YAML van de gebruiker) staat alleen in de werkmap; niet publiceren.
 
 ## Volgende stappen
-1. Controleren of `Shipborn/Shipborn_App` openbaar is; een privé-repository kan HA niet zonder meer installeren.
-2. In HA: repository toevoegen, Shipborn App installeren, opties overnemen, oude app stoppen, **Overzetten**, urentellers en sensoren controleren, automatiseringen aanpassen, oude app verwijderen.
-3. Eventueel in `Shipborn/ha-logboek` een verwijzing naar de nieuwe repository zetten.
-4. Open vragen: lopende uitvoering bewaren? Stappenplan in de taak-PDF? Inhoud van Reizen? Git i.p.v. datummappen?
+1. In HA bijwerken naar 1.1.0; parallelle uitvoeringen op de telefoon testen.
+2. Open vragen: stappenplan in de taak-PDF? Bestede tijd alleen tellen als de uitvoering open is? Inhoud van Reizen? Git i.p.v. datummappen?

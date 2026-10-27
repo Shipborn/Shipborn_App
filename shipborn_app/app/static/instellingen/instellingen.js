@@ -1,37 +1,7 @@
-// Instellingen: urentellers (hoofdmotor, generator), overzetten uit de oude Logboek-app en logo
-// (ook in de kop van de app, in elke PDF en in de dagmail).
+// Instellingen: urentellers (hoofdmotor, generator) en logo (ook in de kop van de app, in elke PDF en in de dagmail).
 tabblad('settings', {
   config: () => showLogo(),
-  toon: () => { loadUren(); loadOverzetten(); },
-});
-
-// ---------------------------------------------------------------- overzetten uit de oude app
-async function loadOverzetten() {
-  const {oud, leeg} = await api('api/overzetten');
-  $('#overzetten').hidden = !oud;
-  if (!oud) return;
-  $('#overzetInfo').innerHTML = `<p>Gevonden in <code>${esc(oud.pad)}</code> (bijgewerkt ${fmtStamp(oud.bijgewerkt)}):
-    ${meervoud(oud.logregels, 'logregel', 'logregels')}, ${meervoud(oud.taken, 'taak', 'taken')},
-    ${meervoud(oud.categorieen, 'categorie', 'categorieën')}, ${meervoud(oud.fotos, 'foto', "foto's")}.</p>
-    ${als(!leeg, '<p class="hint">Deze app heeft al eigen logregels of taken. Overzetten vervangt die.</p>')}`;
-  $('#overzetVervangen').hidden = leeg;
-  $('#overzetVervangen input').checked = false;
-}
-
-$('#overzetKnop').addEventListener('click', async () => {
-  const vervangen = $('#overzetVervangen input').checked;
-  if (!$('#overzetVervangen').hidden && !vervangen) { toast('Vink eerst aan dat de huidige gegevens vervangen mogen worden'); return; }
-  if (!confirm('Gegevens uit de oude Logboek-app overzetten?')) return;
-  const knop = $('#overzetKnop'); knop.disabled = true; knop.textContent = 'Bezig…';
-  try {
-    const r = await api('api/overzetten', json('POST', {vervangen}));
-    toast(`Overgezet: ${meervoud(r.logregels, 'logregel', 'logregels')}, ${meervoud(r.taken, 'taak', 'taken')}, ` +
-      `${meervoud(r.gekopieerd, 'bestand', 'bestanden')}` + (r.ontbreekt ? ` (${r.ontbreekt} niet gevonden)` : ''));
-    await loadConfig();
-    await verversAlles();
-    loadOverzetten(); loadUren();
-  } catch (e) { toast(e.message); }
-  finally { knop.disabled = false; knop.textContent = 'Overzetten'; }
+  toon: () => loadUren(),
 });
 
 // ---------------------------------------------------------------- urentellers

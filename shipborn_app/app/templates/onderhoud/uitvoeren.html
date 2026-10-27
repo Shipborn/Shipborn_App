@@ -1,13 +1,24 @@
-{% from "gedeeld/macros.html" import dialoog %}
-{# Een taak met stappenplan uitvoeren: stap voor stap, met foto's; Afronden maakt de logregel #}
-{% call dialoog("procDlg", "Uitvoeren", titel_id="procTitle") %}
-<div class="dbody blok" id="procBody"></div>
-<!-- niet "hidden": sommige Android-webviews openen dan geen kiezer; geopend via <label for> -->
-<input type="file" id="procCam" class="vh" accept="image/*" capture="environment" tabindex="-1">
-<input type="file" id="procFile" class="vh" accept="image/*" multiple tabindex="-1">
-<div class="dfoot">
-  <button type="button" class="btn left" id="procTerug">Annuleren</button>
-  <span class="hint" id="procStap"></span>
-  <button type="button" class="btn primary" id="procVerder">Volgende ›</button>
-</div>
-{% endcall %}
+{# Stappenplannen uitvoeren: venster voor de actieve uitvoering + balk onderin met alle lopende uitvoeringen.
+   Eigen kop i.p.v. de dialoog-macro: minimaliseren en afbreken in plaats van sluiten. #}
+<dialog id="procDlg">
+  <form method="dialog">
+    <div class="dhead">
+      <h2 id="procTitle">Uitvoeren</h2>
+      <button type="button" class="btn danger" id="procAfbreken" title="Uitvoering afbreken">Afbreken</button>
+      <button type="button" class="x" id="procMin" title="Minimaliseren" aria-label="Minimaliseren">–</button>
+    </div>
+    <div class="procwissel" id="procWissel" hidden></div>
+    <div class="dbody blok" id="procBody"></div>
+    <!-- niet "hidden": sommige Android-webviews openen dan geen kiezer; geopend via <label for> -->
+    <input type="file" id="procCam" class="vh" accept="image/*" capture="environment" tabindex="-1">
+    <input type="file" id="procFile" class="vh" accept="image/*" multiple tabindex="-1">
+    <div class="dfoot">
+      <button type="button" class="btn left" id="procTerug">‹ Vorige</button>
+      <span class="hint" id="procStap"></span>
+      <button type="button" class="btn primary" id="procVerder">Volgende ›</button>
+    </div>
+  </form>
+</dialog>
+
+{# lopende uitvoeringen; zichtbaar in alle modules zolang er een loopt #}
+<div class="rundock" id="runDock" hidden></div>

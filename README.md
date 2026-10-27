@@ -13,6 +13,6 @@ Home Assistant-app (add-on) met één paneel en meerdere modules voor je boot:
 2. Voeg toe: `https://github.com/Shipborn/Shipborn_App`
 3. Installeer **Shipborn App** en start het.
 
-Kom je van de oude Logboek-app (`Shipborn/ha-logboek`)? Zie "Overstappen" in [shipborn_app/DOCS.md](shipborn_app/DOCS.md).
+Opvolger van de Logboek-app (`Shipborn/ha-logboek`).
 
 Zie [shipborn_app/DOCS.md](shipborn_app/DOCS.md) voor de instellingen en het gebruik.
