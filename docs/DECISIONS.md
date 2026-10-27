@@ -41,3 +41,7 @@
 - **Taken zonder stappenplan** houden de gewone logregeldialoog (wens gebruiker), ook om achteraf een oude datum te loggen.
 - **Duur = wandkloktijd** van start tot Afronden, ook als de uitvoering geminimaliseerd was; aan te passen in de logregel.
 - **Overzet-functie verwijderd** (wens gebruiker): de overstap is gedaan en er zijn geen gebruikers meer op de oude app.
+
+## Taak kopiëren (1.2.0)
+- Kopiëren opent de taakdialoog met een ingevulde kopie (naam "Nieuwe taak") in plaats van direct op te slaan: je past hem meestal toch aan, en Annuleren laat geen ongewenste taak achter.
+- Uitlegafbeeldingen worden **gedeeld** tussen origineel en kopie (geen bestanden kopiëren); opruimen gebeurt alleen voor bestanden die nergens meer gebruikt worden.

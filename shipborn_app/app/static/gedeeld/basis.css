@@ -82,7 +82,7 @@ dialog form{display:flex;flex-direction:column;max-height:calc(100vh - 20px)}
 .dbody{padding:14px 16px;overflow-y:auto;display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
 .dbody.blok{display:block}
 .dbody .full{grid-column:1/-1}
-.dfoot{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+.dfoot{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .dfoot .left{margin-right:auto}
 @media (max-width:520px){.dbody{grid-template-columns:1fr}}
 

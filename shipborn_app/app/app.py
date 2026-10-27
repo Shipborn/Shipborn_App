@@ -32,7 +32,7 @@ from fpdf.enums import XPos, YPos
 from flask import Flask, Response, abort, jsonify, render_template, request, send_from_directory
 from PIL import Image, ImageOps
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("shipborn")
@@ -542,6 +542,13 @@ def stap_bestanden(stappen_json):
             for f in (a["bestand"], a["thumb"])}
 
 
+def stap_bestanden_in_gebruik(conn):
+    """Uitlegafbeeldingen waar nog een taak of lopende uitvoering naar verwijst; een gekopieerde taak
+    deelt de bestanden met het origineel, dus alleen opruimen wat nergens meer gebruikt wordt."""
+    return {f for tabel in ("tasks", "uitvoeringen")
+            for (st,) in conn.execute(f"SELECT stappen FROM {tabel}") for f in stap_bestanden(st)}
+
+
 def bedienbare_entiteiten(conn):
     """Alleen entiteiten die in een stappenplan op 'bedienen' staan mogen vanuit de app geschakeld worden."""
     ids = set()
@@ -994,9 +1001,7 @@ def api_task_update(tid):
             (d["naam"], d["categorie"], d["interval_dagen"], d["interval_uren"], d["interval_generator"],
              d["notitie"], d["actief"], d["entiteiten"], d["stappen"], tid),
         )
-        # weggehaalde afbeeldingen, behalve als een lopende uitvoering (kopie van het plan) ze nog toont
-        weg = stap_bestanden(old["stappen"]) - stap_bestanden(d["stappen"])
-        weg -= {f for (st,) in conn.execute("SELECT stappen FROM uitvoeringen") for f in stap_bestanden(st)}
+        weg = stap_bestanden(old["stappen"]) - stap_bestanden_in_gebruik(conn)   # weggehaalde afbeeldingen
     remove_files(*weg)
     changed()
     return jsonify(ok=True)
@@ -1012,7 +1017,8 @@ def api_task_delete(tid):
             "SELECT f.bestand, f.thumb FROM uitvoering_fotos f JOIN uitvoeringen u ON u.id = f.uitvoering_id "
             "WHERE u.task_id = ?", (tid,)) for f in r]
         conn.execute("DELETE FROM tasks WHERE id = ?", (tid,))   # lopende uitvoeringen gaan mee (cascade)
-    remove_files(*stap_bestanden(old["stappen"]), *run_fotos)
+        weg = stap_bestanden(old["stappen"]) - stap_bestanden_in_gebruik(conn)
+    remove_files(*weg, *run_fotos)
     if MQTT:
         MQTT.remove_task(tid)
     changed()

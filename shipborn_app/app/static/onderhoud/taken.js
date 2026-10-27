@@ -85,12 +85,13 @@ $('#tasks').addEventListener('click', ev => {
 });
 
 // ---------------------------------------------------------------- taakdialoog
-function openTask(task = null) {
-  editingTask = task;
+// openTask(taak) bewerkt; openTask(taak, true) opent een kopie (naam "Nieuwe taak") die als nieuwe taak wordt opgeslagen
+function openTask(task = null, kopie = false) {
+  editingTask = kopie ? null : task;
   const f = $('#taskForm'); f.reset();
-  $('#taskTitle').textContent = task ? 'Taak bewerken' : 'Nieuwe taak';
-  $('#taskDelete').hidden = !task;
-  f.naam.value = task?.naam || '';
+  $('#taskTitle').textContent = kopie ? 'Taak kopiëren' : task ? 'Taak bewerken' : 'Nieuwe taak';
+  $('#taskDelete').hidden = !editingTask;
+  f.naam.value = kopie ? 'Nieuwe taak' : task?.naam || '';
   f.categorie.value = task?.categorie || '';
   f.interval_dagen.value = task?.interval_dagen ?? '';
   f.interval_uren.value = nlNum(task?.interval_uren);
@@ -190,5 +191,10 @@ async function renderHistory() {
 
 $('#histBody').addEventListener('click', tlClick);
 $('#histEdit').addEventListener('click', () => openTask(TASKS.find(x => x.id === histTask)));
+$('#histKopie').addEventListener('click', () => {
+  const t = TASKS.find(x => x.id === histTask);
+  $('#histDlg').close();
+  openTask(t, true);
+});
 $('#histDone').addEventListener('click', () => taakUitgevoerd(TASKS.find(x => x.id === histTask)));
 $('#histDlg').addEventListener('close', () => { histTask = null; });
