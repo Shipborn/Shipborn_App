@@ -1,6 +1,6 @@
 # Status
 
-**Versie 1.3.0**, werkmap `261027_2`. Op GitHub (`Shipborn/Shipborn_App`, main). De oude repository `Shipborn/ha-logboek` blijft zonder verwijzing naar de nieuwe (besluit gebruiker); daar staat per ongeluk de agenda als 0.17.0 (2026-11-05).
+**Versie 1.3.0**, werkmap `261027_2`. Op GitHub (`Shipborn/Shipborn_App`, main). De oude repository `Shipborn/ha-logboek` blijft zonder verwijzing naar de nieuwe (besluit gebruiker) en staat op 0.16.0 (de per ongeluk gepushte agenda 0.17.0 is op 2026-11-05 teruggedraaid).
 
 ## Gedaan
 - 0.14.0–0.16.0 (in `Shipborn/ha-logboek`): modules, frontend per tabblad, Onderhoud-module met urentellers en stappenplannen.
