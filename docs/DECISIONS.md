@@ -45,3 +45,10 @@
 ## Taak kopiëren (1.2.0)
 - Kopiëren opent de taakdialoog met een ingevulde kopie (naam "Nieuwe taak") in plaats van direct op te slaan: je past hem meestal toch aan, en Annuleren laat geen ongewenste taak achter.
 - Uitlegafbeeldingen worden **gedeeld** tussen origineel en kopie (geen bestanden kopiëren); opruimen gebeurt alleen voor bestanden die nergens meer gebruikt worden.
+
+## 2026-11-05 – Agenda (1.3.0)
+- **Eigen module Agenda** (hoofdmenu, tussen Onderhoud en Reizen) met maandkalender en daglijst eronder; het raster werkt ook op de telefoon (gekleurde balkjes i.p.v. tekst).
+- **Aparte tabel `planning`** in plaats van een geplande datum op de taak: een taak kan meerdere keren gepland worden, en losse punten zonder taak (afspraken) zijn ook mogelijk. Bij verwijderen van een taak blijft het punt staan (titel is een kopie van de taaknaam).
+- **Afronden via de logregel**: een nieuwe logregel bij de taak rondt het geplande punt af (het gekozen punt, anders het oudste open punt van die taak). Een uitvoering van een stappenplan krijgt geen `planning_id` mee (max. één per taak, dus het oudste open punt is vrijwel altijd het bedoelde). Wordt de logregel verwijderd, dan staat het punt weer open (`entry_id` → NULL). Losse punten worden afgevinkt.
+- **Verwachte datum uit het interval** wordt alleen getoond (niet opgeslagen) en verdwijnt zodra de taak is ingepland; intervallen op uren hebben geen datum en staan niet in de agenda.
+- Eerst per ongeluk gebouwd en gepusht in de oude repo `Shipborn/ha-logboek` (0.17.0); daarna overgezet naar deze app.
