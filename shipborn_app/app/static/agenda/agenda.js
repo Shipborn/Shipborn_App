@@ -41,15 +41,22 @@ async function laadAgenda() {
   renderAgenda();
 }
 
-// verwacht: actieve taak met een volgende datum (interval in dagen) die nog niet is ingepland
-const agVerwacht = () => AG_TAKEN.filter(t => t.actief && t.volgende_datum && !AG_OPEN.some(p => p.task_id === t.id));
+// verwacht: actieve taak met een volgende datum (interval in dagen, vandaag of later) die nog niet is ingepland
+const agIngepland = t => AG_OPEN.some(p => p.task_id === t.id);
+const agVerwacht = () => AG_TAKEN.filter(t => t.actief && t.volgende_datum >= today() && !agIngepland(t));
+// te doen (staat bij vandaag): niet ingepland en te laat, of zonder datum maar wel aan de beurt
+// (nog nooit gelogd, of een interval in uren dat (bijna) bereikt is)
+const agTeDoen = () => AG_TAKEN.filter(t => t.actief && !agIngepland(t) && (t.volgende_datum
+  ? t.volgende_datum < today() : ['achterstallig', 'binnenkort', 'onbekend'].includes(t.status)));
+const LEEG_DAG = () => ({log: [], plan: [], verwacht: [], tedoen: [], extern: []});
 
 function agPerDag() {
   const dag = {};
-  const zet = (d, soort, x) => ((dag[d] ??= {log: [], plan: [], verwacht: [], extern: []})[soort]).push(x);
+  const zet = (d, soort, x) => ((dag[d] ??= LEEG_DAG())[soort]).push(x);
   AG_ENTRIES.forEach(e => zet(e.datum, 'log', e));
   AG_PLAN.forEach(p => zet(p.datum, 'plan', p));
   agVerwacht().forEach(t => zet(t.volgende_datum, 'verwacht', t));
+  agTeDoen().forEach(t => zet(today(), 'tedoen', t));
   // afspraken van meerdere dagen staan op elke dag
   AG_EXTERN.forEach(a => {
     for (const d = new Date(a.datum + 'T00:00:00'); isoD(d) <= a.einddatum; d.setDate(d.getDate() + 1)) zet(isoD(d), 'extern', a);
@@ -65,9 +72,10 @@ function renderAgenda() {
   $('#agMaand').textContent = new Date(j, m, 1).toLocaleDateString('nl-NL', {month: 'long', year: 'numeric'});
   const cellen = [];
   for (const d = new Date(begin); d <= eind; d.setDate(d.getDate() + 1)) {
-    const iso = isoD(d), x = dag[iso] || {log: [], plan: [], verwacht: [], extern: []};
+    const iso = isoD(d), x = dag[iso] || LEEG_DAG();
     const items = [
       ...x.plan.map(p => [`ag-plan${p.gedaan ? ' gedaan' : p.datum < nu ? ' te-laat' : ''}`, (p.tijd ? p.tijd + ' ' : '') + p.titel]),
+      ...x.tedoen.map(t => [`ag-verwacht${t.status === 'achterstallig' ? ' te-laat' : ''}`, t.naam]),
       ...x.verwacht.map(t => [`ag-verwacht${t.status === 'achterstallig' ? ' te-laat' : ''}`, t.naam]),
       ...x.extern.map(a => ['ag-extern', (a.tijd && a.datum === iso ? a.tijd + ' ' : '') + a.titel]),
       ...x.log.map(e => ['ag-log', e.titel]),
@@ -123,9 +131,12 @@ function planCard(p) {
   </article>`;
 }
 
-const verwachtCard = t => `<article class="card s-${t.status}" data-taak="${t.id}">
+// waarom een taak bij "te doen" staat
+const teDoenReden = t => t.volgende_datum ? `moest op ${fmtDate(t.volgende_datum)}` : !t.laatst_datum ? 'nog nooit gelogd' : dueText(t);
+
+const verwachtCard = (t, uitleg = 'verwacht volgens interval') => `<article class="card s-${t.status}" data-taak="${t.id}">
     <div class="taskrow"><div class="grow">
-      <div class="meta">${statusHtml(t)} ${chip(t.categorie)} <span>verwacht volgens interval</span></div>
+      <div class="meta">${statusHtml(t)} ${chip(t.categorie)} <span>${esc(uitleg)}</span></div>
       <h3>${esc(t.naam)}</h3>
       <div class="due">${laatstText(t)}</div>
     </div>
@@ -141,18 +152,19 @@ const externCard = a => `<article class="card agextern">
     ${a.omschrijving ? `<p class="desc">${esc(a.omschrijving)}</p>` : ''}
   </article>`;
 
-function renderDag(x = {log: [], plan: [], verwacht: [], extern: []}) {
+function renderDag(x = LEEG_DAG()) {
   const nu = today();
   // vandaag: ook wat eerder gepland was en nog open staat
   const eerder = AG_DAG === nu ? AG_OPEN.filter(p => p.datum < nu) : [];
   const blok = (titel, html) => als(html, `<h3 class="agkopje">${titel}</h3>${html}`);
-  const alles = eerder.length + x.plan.length + x.verwacht.length + x.log.length + x.extern.length;
+  const alles = eerder.length + x.plan.length + x.verwacht.length + x.tedoen.length + x.log.length + x.extern.length;
   $('#agDag').innerHTML = `
     <div class="agdagkop"><h2>${dagLang(AG_DAG)}</h2>
       <button type="button" class="btn" id="agPlanNieuw">+ Inplannen</button></div>
     ${blok('Nog open van eerder', eerder.map(planCard).join(''))}
     ${blok('Gepland', x.plan.map(planCard).join(''))}
-    ${blok('Verwacht volgens interval', x.verwacht.map(verwachtCard).join(''))}
+    ${blok('Te doen (nog niet ingepland)', x.tedoen.map(t => verwachtCard(t, teDoenReden(t))).join(''))}
+    ${blok('Verwacht volgens interval', x.verwacht.map(t => verwachtCard(t)).join(''))}
     ${blok('Agenda' + (AG_KOPPELING?.kalender_naam ? ' (' + esc(AG_KOPPELING.kalender_naam) + ')' : ''), x.extern.map(externCard).join(''))}
     ${blok('Logboek', x.log.map(entryCard).join(''))}
     ${als(!alles, leeg('Niets op deze dag.<br>Tik op <b>+ Inplannen</b> om een taak of afspraak in te plannen.'))}`;

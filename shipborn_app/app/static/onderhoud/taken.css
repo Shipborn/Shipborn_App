@@ -16,3 +16,5 @@
 .stapsam{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;margin-top:4px}
 .stapsam span{flex:1;min-width:160px}
 @media (max-width:520px){.tellers{grid-template-columns:1fr}}
+.tellers.inplan{grid-template-columns:repeat(2,minmax(0,220px))}
+@media (max-width:520px){.tellers.inplan{grid-template-columns:1fr 1fr}}

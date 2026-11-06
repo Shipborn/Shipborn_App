@@ -716,9 +716,11 @@ def task_status(conn, t, hours_now, today):
     last = conn.execute(
         "SELECT datum FROM entries WHERE task_id = ? ORDER BY datum DESC, id DESC LIMIT 1", (t["id"],)).fetchone()
     s.update(laatst_datum=last["datum"] if last else None, volgende_datum=None, dagen_rest=None, tellers=[])
-    plan = conn.execute("SELECT datum FROM planning WHERE task_id = ? AND NOT afgevinkt AND entry_id IS NULL "
+    plan = conn.execute("SELECT id, datum, tijd FROM planning WHERE task_id = ? AND NOT afgevinkt AND entry_id IS NULL "
                         "ORDER BY datum, id LIMIT 1", (t["id"],)).fetchone()
     s["gepland_datum"] = plan["datum"] if plan else None
+    s["gepland_tijd"] = plan["tijd"] if plan else None
+    s["gepland_id"] = plan["id"] if plan else None
     if t["interval_dagen"] and last:
         volgende = date.fromisoformat(last["datum"]) + timedelta(days=t["interval_dagen"])
         s["volgende_datum"] = volgende.isoformat()
@@ -1056,6 +1058,7 @@ def api_task_create():
              d["notitie"], d["actief"], d["entiteiten"], d["stappen"]),
         )
         tid = cur.lastrowid
+        taak_inplannen(conn, tid, d["naam"], request.get_json(force=True) or {})
     changed()
     return jsonify(id=tid), 201
 
@@ -1073,6 +1076,7 @@ def api_task_update(tid):
             (d["naam"], d["categorie"], d["interval_dagen"], d["interval_uren"], d["interval_generator"],
              d["notitie"], d["actief"], d["entiteiten"], d["stappen"], tid),
         )
+        taak_inplannen(conn, tid, d["naam"], request.get_json(force=True) or {})
         weg = stap_bestanden(old["stappen"]) - stap_bestanden_in_gebruik(conn)   # weggehaalde afbeeldingen
     remove_files(*weg)
     changed()
@@ -1115,6 +1119,35 @@ def plan_afronden(conn, entry_id, task_id, planning_id=None):
         conn.execute("UPDATE planning SET entry_id = ?, updated_at = ? WHERE id = (SELECT id FROM planning "
                      "WHERE task_id = ? AND NOT afgevinkt AND entry_id IS NULL ORDER BY datum, id LIMIT 1)",
                      (entry_id, now_fijn(), task_id))
+
+
+def taak_inplannen(conn, tid, naam, d):
+    """Vaste datum vanuit de taakdialoog ({gepland_datum, gepland_tijd}): het eerstvolgende open punt van de taak
+    verzetten, een nieuw punt maken, of (lege datum) het open punt weghalen. Zonder gepland_datum: niets doen."""
+    if "gepland_datum" not in d:
+        return
+    datum = text(d.get("gepland_datum"))
+    tijd = text(d.get("gepland_tijd"))
+    if tijd:
+        m = re.fullmatch(r"([01]?\d|2[0-3]):([0-5]\d)", tijd)
+        if not m:
+            abort(400, f"Ongeldige tijd: {tijd} (gebruik bijv. 09:30)")
+        tijd = f"{int(m.group(1)):02d}:{m.group(2)}"
+    open_ = conn.execute("SELECT * FROM planning WHERE task_id = ? AND NOT afgevinkt AND entry_id IS NULL "
+                         "ORDER BY datum, id LIMIT 1", (tid,)).fetchone()
+    if not datum:
+        if open_:
+            conn.execute("DELETE FROM planning WHERE id = ?", (open_["id"],))
+        return
+    datum = iso_date(datum)
+    if open_:
+        if (open_["datum"], open_["tijd"]) != (datum, tijd):
+            conn.execute("UPDATE planning SET datum = ?, tijd = ?, duur_minuten = ?, updated_at = ? WHERE id = ?",
+                         (datum, tijd, open_["duur_minuten"] if tijd else None, now_fijn(), open_["id"]))
+    else:
+        conn.execute("INSERT INTO planning (datum, tijd, task_id, titel, afgevinkt, created_at, ingevoerd_door, uid, "
+                     "updated_at) VALUES (?,?,?,?,0,?,?,?,?)", (datum, tijd, tid, naam, now(), current_user(),
+                                                                "shipborn-plan-" + uuid.uuid4().hex, now_fijn()))
 
 
 def planning_json(row):
@@ -1248,9 +1281,10 @@ def agenda_info():
         status = json.loads(meta_get(conn, "agenda_status") or "null")
         kal, kal_naam = meta_get(conn, "agenda_kalender") or "", meta_get(conn, "agenda_kalender_naam") or ""
         logregels = meta_get(conn, "agenda_logregels") == "1"
+        taken = meta_get(conn, "agenda_taken") != "0"
     g = google_account()
     return {"dienst": dienst, "account": agenda_account(dienst) is not None, "kalender": kal, "kalender_naam": kal_naam,
-            "logregels": logregels, "status": status,
+            "logregels": logregels, "taken": taken, "status": status,
             "caldav": {"ingesteld": caldav_account() is not None, "gebruiker": text(OPT.get("caldav_username")) or "",
                        "url": text(OPT.get("caldav_url")) or ""},
             "google": {"ingesteld": g is not None, "gekoppeld": bool(g and g.gekoppeld())}}
@@ -1298,11 +1332,12 @@ def agenda_sync():
         dav = agenda_account(agenda_dienst(conn))
         kal = meta_get(conn, "agenda_kalender")
         logregels = meta_get(conn, "agenda_logregels") == "1"
+        taken = meta_get(conn, "agenda_taken") != "0"
     if not dav or not kal:
         return None
     with AGENDA_LOCK:
         try:
-            status = {"ok": True, "fout": None, **_agenda_sync(dav, kal, logregels)}
+            status = {"ok": True, "fout": None, **_agenda_sync(dav, kal, logregels, taken)}
         except Exception as e:  # noqa: BLE001
             log.warning("Agenda synchroniseren mislukt: %s", e, exc_info=not isinstance(e, kalender.AgendaFout))
             status = {"ok": False, "fout": str(e)}
@@ -1312,9 +1347,36 @@ def agenda_sync():
     return status
 
 
-def _agenda_sync(dav, kal, logregels):
+def taak_aan_de_beurt(t, vandaag):
+    """Datum waarop een (niet ingeplande) taak in de agenda komt: de volgende datum volgens het interval, of vandaag
+    als hij te laat is of zonder datum aan de beurt is (nog nooit gelogd, interval in uren). None = niet tonen."""
+    if not t["actief"] or t["gepland_datum"]:
+        return None
+    if t["volgende_datum"]:
+        return max(t["volgende_datum"], vandaag.isoformat())
+    return vandaag.isoformat() if t["status"] in ("achterstallig", "binnenkort", "onbekend") else None
+
+
+def taak_velden(t, datum):
+    if t["volgende_datum"]:
+        reden = (f"Volgens het interval moest dit op {t['volgende_datum']}." if t["volgende_datum"] < datum
+                 else "Volgens het interval moet dit weer gebeuren.")
+    elif not t["laatst_datum"]:
+        reden = "Nog nooit gelogd."
+    else:
+        reden = "Volgens de urenteller is dit (bijna) aan de beurt: " + ", ".join(
+            f"{c['naam'].lower()} bij {c['volgende']} u" for c in t["tellers"] if c["volgende"] is not None) + "."
+    regels = [reden, "Plan hem in de app in om er een vaste datum aan te geven.",
+              f"Categorie: {t['categorie']}" if t["categorie"] else ""]
+    v = {"titel": f"Onderhoud: {t['naam']}", "datum": datum, "tijd": None, "duur": None,
+         "omschrijving": ("\n".join(x for x in regels if x) + kalender.VOET + (f" · {app_link()}" if app_link() else "")).strip()}
+    return dict(v, updated_at=hashlib.sha1(json.dumps(v, sort_keys=True).encode()).hexdigest())
+
+
+def _agenda_sync(dav, kal, logregels, taken=True):
     tz = local_tz()
     vandaag = datetime.now(tz).date()
+    uren = engine_hours() if taken else None
     van, tot = vandaag - timedelta(days=AGENDA_TERUG), vandaag + timedelta(days=AGENDA_VOORUIT)
     hoofden, voorkomens = dav.afspraken(kal, van, tot)
 
@@ -1330,6 +1392,13 @@ def _agenda_sync(dav, kal, logregels):
             ids = [lid for (s, lid) in syncs if s == "log"]
             where = "WHERE e.datum >= ?" + (f" OR e.id IN ({','.join('?' * len(ids))})" if ids else "")
             logs = {e["id"]: e for e in entries_with_photos(conn, where, [van.isoformat(), *ids])}
+        # taken die aan de beurt zijn maar niet ingepland (alleen app -> agenda); "updated_at" = hash van de inhoud
+        taak_v = {}
+        if taken:
+            for t in all_task_status(conn, uren):
+                d = taak_aan_de_beurt(t, vandaag)
+                if d:
+                    taak_v[t["id"]] = taak_velden(t, d)
 
     n = {"verstuurd": 0, "opgehaald": 0, "verwijderd": 0}
 
@@ -1352,8 +1421,9 @@ def _agenda_sync(dav, kal, logregels):
         zet_sync(soort, lid, uid, a, gesynct)
         n["verstuurd"] += 1
 
-    for soort, lid in sorted(set(syncs) | {("plan", i) for i in plans} | {("log", i) for i in logs}):
-        lokaal = (plans if soort == "plan" else logs).get(lid)
+    lokale = {"plan": plans, "log": logs, "taak": taak_v}
+    for soort, lid in sorted(set(syncs) | {(k, i) for k, items in lokale.items() for i in items}):
+        lokaal = lokale.get(soort, {}).get(lid)
         s = syncs.get((soort, lid))
         try:
             if lokaal is None:                                   # in de app verwijderd (of logregels uitgezet)
@@ -1362,9 +1432,9 @@ def _agenda_sync(dav, kal, logregels):
                     n["verwijderd"] += 1
                 bewaar("DELETE FROM agenda_sync WHERE soort = ? AND lokaal_id = ?", (soort, lid))
                 continue
-            v = plan_velden(lokaal) if soort == "plan" else log_velden(lokaal)
+            v = plan_velden(lokaal) if soort == "plan" else log_velden(lokaal) if soort == "log" else lokaal
             if s is None:                                        # nieuw in de app
-                uid = lokaal["uid"] if soort == "plan" else f"shipborn-log-{agid}-{lid}"
+                uid = lokaal["uid"] if soort == "plan" else f"shipborn-{soort}-{agid}-{lid}"
                 # stond hij er al (bijv. vorige ronde halverwege afgebroken), dan bijwerken
                 stuur(soort, lid, uid, v, hoofden.get(uid), lokaal["updated_at"])
                 continue
@@ -1385,7 +1455,7 @@ def _agenda_sync(dav, kal, logregels):
                     zet_sync(soort, lid, s["uid"], {"ref": s["href"], "etag": ""}, s["gesynct"])
                 continue
             extern_gewijzigd = remote["etag"] != s["etag"]
-            if gewijzigd or (soort == "log" and extern_gewijzigd):   # app wint; logregels gaan maar één kant op
+            if gewijzigd or (soort != "plan" and extern_gewijzigd):   # app wint; logregels/taken gaan één kant op
                 stuur(soort, lid, s["uid"], v, remote, lokaal["updated_at"])
             elif extern_gewijzigd:                               # in de agenda gewijzigd -> planning bijwerken
                 t = kalender.tijden(remote, tz)
@@ -1489,6 +1559,8 @@ def api_agenda_instellingen_opslaan():
         meta_set(conn, "agenda_kalender", kal)
         meta_set(conn, "agenda_kalender_naam", text(d.get("kalender_naam")) or "")
         meta_set(conn, "agenda_logregels", "1" if d.get("logregels") else "0")
+        if "taken" in d:
+            meta_set(conn, "agenda_taken", "1" if d.get("taken") else "0")
     agenda_sync()
     return jsonify(agenda_info())
 

@@ -80,6 +80,8 @@ function renderAgendaInst() {
     </div>
     ${acc}
     ${als(klaar, `<label class="agkal">Kalender<select name="kalender"><option value="">Kalenders ophalen…</option></select></label>
+    <label class="check"><input type="checkbox" name="taken"${i.taken ? ' checked' : ''}> Taken die aan de beurt zijn ook in de agenda zetten</label>
+    <p class="hint">Taken die nog niet zijn ingepland komen als afspraak van een hele dag "Onderhoud: …" op de datum volgens het interval, of vandaag als ze te laat zijn of geen datum hebben. Plan je de taak in, dan komt het geplande punt ervoor in de plaats.</p>
     <label class="check"><input type="checkbox" name="logregels"${i.logregels ? ' checked' : ''}> Logregels ook in de agenda zetten</label>
     <p class="hint">Logregels gaan alleen van de app naar de agenda, als afspraak van een hele dag (vanaf 90 dagen terug).</p>`)}
     <p class="hint" id="agendaStatus">${d === i.dienst ? agendaStatus(i.status) : ''}</p>`;
@@ -139,7 +141,7 @@ $('#agendaForm').addEventListener('submit', async ev => {
   ev.preventDefault();
   const f = ev.target, sel = f.kalender;
   const body = {dienst: agiDienst, kalender: sel.value, kalender_naam: sel.value ? sel.selectedOptions[0].textContent : '',
-    logregels: f.logregels.checked};
+    logregels: f.logregels.checked, taken: f.taken.checked};
   if (AGI.kalender && (body.kalender !== AGI.kalender || body.dienst !== AGI.dienst) &&
       !confirm('Een andere agenda kiezen? De afspraken die al in de vorige agenda staan, blijven daar staan.')) return;
   toast('Opslaan en synchroniseren…');

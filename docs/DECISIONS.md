@@ -8,7 +8,7 @@
 
 ## 2026-10-26 – Werkwijze met datummappen
 - Elke sessie begint met een nieuwe kopie van de nieuwste datummap in `../jjmmdd` (bij meerdere sessies op één dag `jjmmdd_2`, …), gemaakt met `../nieuwe_sessie.ps1`. Oudere mappen blijven als archief staan.
-- De datummappen zijn geen git-repository. GitHub (`Shipborn/ha-logboek`, main) wordt bijgewerkt door de inhoud van de nieuwste datummap volledig over de repo heen te zetten, als normale commit bovenop de bestaande geschiedenis (geen force-push).
+- De datummappen zijn geen git-repository. GitHub (`Shipborn/ha-logboek`, main; sinds 1.0.0 `Shipborn/Shipborn_App`) wordt bijgewerkt door de inhoud van de nieuwste datummap volledig over de repo heen te zetten, als normale commit bovenop de bestaande geschiedenis (geen force-push).
 
 ## 2026-10-26 – Frontend per tabblad in losse bestanden (0.15.0)
 - **Server-side samenstellen met Jinja** (zit al in Flask, geen nieuwe dependency, geen build-stap). Alternatief was HTML-fragmenten in de browser ophalen; dat geeft een extra laadstap en volgordeproblemen met event-handlers.
@@ -25,7 +25,7 @@
 - **Gates als "vereiste status" per entiteit** (off/on/closed/open) in plaats van vrije Jinja-templates zoals in het script: eenvoudig in te stellen in de editor en zonder template-engine in de app.
 - **Bedienen alleen voor entiteiten die in een stappenplan op 'bedienen' staan** en alleen voor schakelbare domeinen: het paneel is ook voor niet-beheerders, dus geen vrije toegang tot alle HA-services.
 - **Afronden maakt automatisch een logregel** (wens gebruiker) via de bestaande `POST api/entries`; geen aparte tabel voor uitvoeringen.
-- **Uitvoering alleen in de browser** tot Afronden (eenvoud). Bewaren van een lopende uitvoering staat als open vraag in STATUS.
+- **Uitvoering alleen in de browser** tot Afronden (eenvoud). Vervangen in 1.1.0: uitvoeringen staan op de server.
 
 ## 2026-10-27 – Nieuwe app Shipborn App in eigen repository (1.0.0)
 - **Nieuwe repository `Shipborn/Shipborn_App` en nieuwe slug `shipborn_app`** (wens gebruiker). Dit vervangt het besluit uit 0.14.0 om de slug `logboek` te houden: het is in HA nu een nieuwe app met een lege `/data`, dus de gegevens worden overgezet. De oude repository `Shipborn/ha-logboek` (0.16.0) blijft bestaan voor de oude installatie.
@@ -34,7 +34,7 @@
 - **Nieuwe MQTT-namen (`shipborn_…`)** (wens gebruiker): oude en nieuwe app botsen niet; automatiseringen op de oude sensoren moeten worden aangepast.
 - Optie `engine_hours_entity` vervalt in de nieuwe app; urentellers staan in Instellingen.
 
-## Parallelle uitvoeringen (1.1.0)
+## 2026-10-27 – Parallelle uitvoeringen (1.1.0)
 - **Uitvoeringen op de server** (wens gebruiker): meerdere tegelijk, minimaliseren en wisselen, en ze overleven herladen (de HA-app op de telefoon herlaadt vaak) en zijn op een ander apparaat te hervatten. Foto's gaan direct naar `fotos/<jjjj>/<mm>`, zodat Afronden alleen de koppeling verplaatst.
 - **Kopie van het stappenplan per uitvoering**: wijzigen van de taak tijdens een uitvoering verschuift de stappen niet.
 - **Eén uitvoering per taak**: nogmaals Uitvoeren opent de lopende.
@@ -42,7 +42,8 @@
 - **Duur = wandkloktijd** van start tot Afronden, ook als de uitvoering geminimaliseerd was; aan te passen in de logregel.
 - **Overzet-functie verwijderd** (wens gebruiker): de overstap is gedaan en er zijn geen gebruikers meer op de oude app.
 
-## Taak kopiëren (1.2.0)
+## 2026-10-27 – Taak kopiëren (1.2.0)
+- **In de app in plaats van handmatig in de database** (wens gebruiker, na uitleg over `docker cp` van `/data/shipborn.db`): veiliger dan SQL op de live database.
 - Kopiëren opent de taakdialoog met een ingevulde kopie (naam "Nieuwe taak") in plaats van direct op te slaan: je past hem meestal toch aan, en Annuleren laat geen ongewenste taak achter.
 - Uitlegafbeeldingen worden **gedeeld** tussen origineel en kopie (geen bestanden kopiëren); opruimen gebeurt alleen voor bestanden die nergens meer gebruikt worden.
 
@@ -61,4 +62,6 @@
 - **Planning kreeg tijd en duur**: anders zou een tijd die op de telefoon wordt ingesteld bij de volgende wijziging in de app verloren gaan. `updated_at` in microseconden: met seconden werden wijzigingen vlak na een sync gemist.
 - **Inloggegevens als app-opties en het Google-token in `/data`**, niet in de database: die wordt naar `/share` gekopieerd en is daar ook voor andere apps en Samba leesbaar.
 - **Google: eigen OAuth-client van de gebruiker en het localhost-adres terugplakken**. De device flow staat de agenda-scope niet toe, en een vaste redirect naar de app kan niet (het ingress-adres verandert per sessie). De gebruiker moet het toestemmingsscherm op In productie zetten, anders verloopt de koppeling na 7 dagen.
+- **Taken die aan de beurt zijn ook naar de agenda** (wens gebruiker), één richting en aan/uit te zetten: te laat of zonder datum → vandaag, anders de datum volgens het interval. Wijzigingen worden herkend aan een hash van de inhoud (er is geen wijzigingstijd). Verplaatsen op de telefoon wordt overschreven: een vaste datum geef je door in te plannen.
+- **Vaste datum in de taakdialoog** stuurt het eerstvolgende open geplande punt van de taak aan (geen extra kolom op de taak): zo blijft er één bron voor geplande datums.
 
