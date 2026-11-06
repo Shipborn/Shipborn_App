@@ -66,7 +66,7 @@ const taskCard = t => `
         <h3>${esc(t.naam)}</h3>
         <div class="due">Volgende: ${dueText(t)}</div>
         <div class="due">${laatstText(t)}</div>
-        ${als(t.gepland_datum, `<div class="due gepland">📅 Ingepland op ${fmtDate(t.gepland_datum)}</div>`)}
+        ${als(t.gepland_datum, `<div class="due gepland">📅 Ingepland op ${fmtDate(t.gepland_datum)}${t.gepland_tijd ? ' ' + t.gepland_tijd : ''}</div>`)}
       </div>
       ${als(t.actief, `<button class="btn primary" data-done="${t.id}">${uitvoerLabel(t)}</button>`)}
       <span class="chev" aria-hidden="true">›</span>
@@ -99,6 +99,8 @@ function openTask(task = null, kopie = false) {
   f.interval_generator.value = nlNum(task?.interval_generator);
   f.notitie.value = task?.notitie || '';
   f.actief.checked = task ? !!task.actief : true;
+  f.gepland_datum.value = kopie ? '' : task?.gepland_datum || '';   // eerstvolgende geplande punt van de taak
+  f.gepland_tijd.value = kopie ? '' : task?.gepland_tijd || '';
   zetStappen(task?.stappen || []);
   entPicker($('#taskEnts'), task?.entiteiten || []);
   tellerHint();
@@ -120,7 +122,10 @@ $('#taskForm').addEventListener('submit', async ev => {
   const f = ev.target;
   const body = {naam: f.naam.value, categorie: f.categorie.value, interval_dagen: f.interval_dagen.value,
     interval_uren: f.interval_uren.value, interval_generator: f.interval_generator.value,
-    notitie: f.notitie.value, actief: f.actief.checked, entiteiten: $('#taskEnts')._list, stappen: STAPPEN};
+    notitie: f.notitie.value, actief: f.actief.checked, entiteiten: $('#taskEnts')._list, stappen: STAPPEN,
+    gepland_datum: f.gepland_datum.value, gepland_tijd: f.gepland_datum.value ? f.gepland_tijd.value : ''};
+  if (editingTask?.gepland_datum && !body.gepland_datum &&
+      !confirm('De geplande datum is leeggemaakt. Het geplande punt in de agenda verwijderen?')) return;
   try {
     await api(editingTask ? 'api/tasks/' + editingTask.id : 'api/tasks', json(editingTask ? 'PUT' : 'POST', body));
     $('#taskDlg').close(); toast('Opgeslagen');
