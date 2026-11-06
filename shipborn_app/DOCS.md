@@ -29,6 +29,10 @@ Eén paneel in de Home Assistant-zijbalk met modules voor je boot. Bovenin kies 
 | `smtp_host`, `smtp_port`, `smtp_security` | Uitgaande mailserver. `starttls` met poort `587` werkt bij de meeste providers; `ssl` hoort bij poort `465`. |
 | `smtp_username`, `smtp_password` | Inloggegevens van de mailserver. Bij Gmail en Outlook heb je een **app-wachtwoord** nodig, niet je gewone wachtwoord. |
 | `smtp_from` | Afzenderadres. Leeg = de gebruikersnaam. |
+| `caldav_url` | Adres van de agenda (CalDAV). Voor iCloud: `https://caldav.icloud.com/` (standaard). Ook Nextcloud, Fastmail e.d. werken. |
+| `caldav_username` | Voor iCloud: je Apple ID (e-mailadres). |
+| `caldav_password` | Voor iCloud: een **app-specifiek wachtwoord** (account.apple.com › Inloggen en beveiliging › App-specifieke wachtwoorden), niet je gewone wachtwoord. |
+| `google_client_id`, `google_client_secret` | Voor Google Agenda: client-ID en clientgeheim van een eigen OAuth-client (type **Desktop-app**) in Google Cloud. Zie **Agenda koppelen** hieronder. |
 
 ## Gebruik
 
@@ -46,6 +50,13 @@ Het logboek is voor **alle gebruikers** van Home Assistant beschikbaar, ook zond
 - **Dagmail**: staat `email_enabled` aan, dan krijg je elke dag op `email_time` een e-mail met alle logregels die sinds de vorige mail zijn ingevoerd, met foto's. Is er niets ingevoerd, dan komt er geen mail. Met **Testmail sturen** (boven het logboek) verstuur je direct een mail met de logregels van vandaag om de instellingen te controleren.
 - **PDF**: op elke logregel in het **Logboek**, elke taak in **Taken** en elke categorie in **Categorieën** staat een knop **PDF**. Daarmee maak je een PDF van die logregel, van de taak met al zijn uitvoeringen of van alle logregels in de categorie. Met logo, foto's, omschrijvingen, meetwaarden en bestede tijd.
 - **Agenda**: een maandkalender met per dag de logregels (blauw), wat je hebt ingepland (oranje; rood als het te laat is, groen als het gedaan is) en wanneer een taak volgens haar interval in dagen weer moet (grijs). Tik op een dag om alles van die dag eronder te zien. Met **+** of **Inplannen** plan je een onderhoudstaak of een los punt (bijv. "werf bellen") op een datum, met een notitie. Een ingeplande taak voer je uit vanuit de agenda; de logregel die daarbij ontstaat rondt het geplande punt af. Log je een taak ergens anders (of rond je een stappenplan af), dan wordt het oudste openstaande geplande punt van die taak afgerond. Een los punt vink je af met **Afvinken**. Bij **Vandaag** zie je ook wat eerder gepland was en nog openstaat; het aantal daarvan staat rood bij Agenda. Ook vanuit de geschiedenis van een taak kun je **Inplannen**; de geplande datum staat dan bij de taak.
+- Bij inplannen kun je ook een **tijd** en **duur** opgeven; zonder tijd is het een afspraak van een hele dag.
+- **Agenda koppelen** (Instellingen › Agenda): kies **iCloud / CalDAV** of **Google Agenda** en daarna de kalender (tip: maak een aparte kalender, bijv. "Boot").
+  - *iCloud*: vul `caldav_username` en `caldav_password` in bij de opties en herstart de app.
+  - *Google* vraagt eenmalig een eigen (gratis) koppeling in Google Cloud: maak op console.cloud.google.com een project, zet de **Google Calendar API** aan, stel het **OAuth-toestemmingsscherm** in (Extern, daarna **Publiceren / In productie**, anders verloopt de koppeling na 7 dagen; verificatie is niet nodig) en maak een **OAuth-client-ID** van het type **Desktop-app**. Zet client-ID en clientgeheim in `google_client_id` / `google_client_secret` en herstart de app. Klik in de app op **Google openen en toestemming geven** (in een gewone browser, niet in de HA-app); bij de melding dat de app niet geverifieerd is kies je *Geavanceerd › Ga naar … (onveilig)* — het is je eigen koppeling. Daarna opent een pagina die niet laadt (`http://localhost/?…`): kopieer dat hele adres en plak het bij **Koppeling afronden**.
+  - Ingeplande punten gaan **in beide richtingen**: verschuif, hernoem of verwijder je er een in je agenda, dan gebeurt dat ook in de app. Gedaan staat met ✓ in de agenda. Wijzig je hetzelfde punt aan beide kanten tegelijk, dan wint de app. Herinneringen die je in de agenda toevoegt blijven staan.
+  - Met **Logregels ook in de agenda zetten** komen logregels (vanaf 90 dagen terug) als afspraak van een hele dag in de agenda; die gaan alleen van de app naar de agenda.
+  - Andere afspraken uit de gekozen kalender staan paars in de agenda, alleen om te bekijken. De app synchroniseert elke 5 minuten, direct na een wijziging en als je de Agenda opent. Kies je een andere dienst of kalender, dan blijven oude afspraken in de vorige staan.
 - **Instellingen › Urentellers**: kies de sensoren met de draaiuren van de hoofdmotor en de generator. De standen staan bovenaan de app.
 - **Instellingen › Logo**: kies een afbeelding (bij voorkeur PNG met transparante achtergrond). Het logo staat dan links naast de titel bovenaan het logboek, bovenaan elke PDF en bovenaan de dagmail. Met **Verwijderen** haal je het weer weg.
 - **CSV exporteren** levert een bestand dat direct in Excel opent.
@@ -53,6 +64,7 @@ Het logboek is voor **alle gebruikers** van Home Assistant beschikbaar, ook zond
 ## Opslag en back-up
 
 - Database: `/data/shipborn.db` (in de back-up van de app).
+- Google-koppeling (token): `/data/google_token.json` (niet in `/share`).
 - Alle bestanden staan in `/share/shipborn` (in een volledige back-up, en via Samba bereikbaar):
   - `fotos/<jaar>/<maand>/` – foto's bij logregels, per maand van uploaden (met `_t` = miniatuur);
   - `stappenplannen/` – uitlegafbeeldingen van stappenplannen;

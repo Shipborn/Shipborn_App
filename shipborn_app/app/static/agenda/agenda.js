@@ -1,6 +1,8 @@
 // Agenda: maandkalender met de logregels op datum, ingeplande taken/losse punten en de datum waarop een
-// taak volgens haar interval weer moet (verwacht). Klik op een dag toont die dag eronder.
+// taak volgens haar interval weer moet (verwacht), plus de afspraken uit de gekoppelde agenda (iCloud/Google,
+// Instellingen › Agenda). Klik op een dag toont die dag eronder.
 let AG_MAAND = null, AG_DAG = today(), AG_ENTRIES = [], AG_PLAN = [], AG_OPEN = [], AG_TAKEN = [], agEditing = null;
+let AG_EXTERN = [], AG_KOPPELING = null;
 
 const pad2 = n => String(n).padStart(2, '0');
 const isoD = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -8,6 +10,7 @@ const dagLang = d => new Date(d + 'T00:00:00').toLocaleDateString('nl-NL', {week
 
 tabblad('agenda', {
   nieuw: () => openPlanning(null, {datum: AG_DAG}),
+  toon: () => { if (AG_KOPPELING?.account && AG_KOPPELING.kalender) syncAgenda(true); },
   laden: () => laadAgenda(),
   ververs: () => laadAgenda(),
 });
@@ -30,7 +33,10 @@ function agRaster() {
 async function laadAgenda() {
   if (!AG_MAAND) { const d = new Date(); AG_MAAND = [d.getFullYear(), d.getMonth()]; }
   const [van, tot] = agRaster().map(isoD), p = `van=${van}&tot=${tot}`;
-  [AG_ENTRIES, AG_PLAN, AG_OPEN] = await Promise.all([api('api/entries?' + p), api('api/planning?' + p), api('api/planning?open=1')]);
+  let ext;
+  [AG_ENTRIES, AG_PLAN, AG_OPEN, ext] = await Promise.all([api('api/entries?' + p), api('api/planning?' + p),
+    api('api/planning?open=1'), api('api/agenda/extern?' + p)]);
+  AG_EXTERN = ext.afspraken; AG_KOPPELING = ext.koppeling;
   zetTeller('agenda', AG_OPEN.filter(x => x.datum < today()).length);
   renderAgenda();
 }
@@ -40,10 +46,15 @@ const agVerwacht = () => AG_TAKEN.filter(t => t.actief && t.volgende_datum && !A
 
 function agPerDag() {
   const dag = {};
-  const zet = (d, soort, x) => ((dag[d] ??= {log: [], plan: [], verwacht: []})[soort]).push(x);
+  const zet = (d, soort, x) => ((dag[d] ??= {log: [], plan: [], verwacht: [], extern: []})[soort]).push(x);
   AG_ENTRIES.forEach(e => zet(e.datum, 'log', e));
   AG_PLAN.forEach(p => zet(p.datum, 'plan', p));
   agVerwacht().forEach(t => zet(t.volgende_datum, 'verwacht', t));
+  // afspraken van meerdere dagen staan op elke dag
+  AG_EXTERN.forEach(a => {
+    for (const d = new Date(a.datum + 'T00:00:00'); isoD(d) <= a.einddatum; d.setDate(d.getDate() + 1)) zet(isoD(d), 'extern', a);
+  });
+  for (const x of Object.values(dag)) x.plan.sort((a, b) => (a.tijd || '').localeCompare(b.tijd || ''));
   return dag;
 }
 
@@ -54,10 +65,11 @@ function renderAgenda() {
   $('#agMaand').textContent = new Date(j, m, 1).toLocaleDateString('nl-NL', {month: 'long', year: 'numeric'});
   const cellen = [];
   for (const d = new Date(begin); d <= eind; d.setDate(d.getDate() + 1)) {
-    const iso = isoD(d), x = dag[iso] || {log: [], plan: [], verwacht: []};
+    const iso = isoD(d), x = dag[iso] || {log: [], plan: [], verwacht: [], extern: []};
     const items = [
-      ...x.plan.map(p => [`ag-plan${p.gedaan ? ' gedaan' : p.datum < nu ? ' te-laat' : ''}`, p.titel]),
+      ...x.plan.map(p => [`ag-plan${p.gedaan ? ' gedaan' : p.datum < nu ? ' te-laat' : ''}`, (p.tijd ? p.tijd + ' ' : '') + p.titel]),
       ...x.verwacht.map(t => [`ag-verwacht${t.status === 'achterstallig' ? ' te-laat' : ''}`, t.naam]),
+      ...x.extern.map(a => ['ag-extern', (a.tijd && a.datum === iso ? a.tijd + ' ' : '') + a.titel]),
       ...x.log.map(e => ['ag-log', e.titel]),
     ];
     const cls = [d.getMonth() !== m && 'ander', iso === nu && 'vandaag', iso === AG_DAG && 'gekozen'].filter(Boolean).join(' ');
@@ -69,6 +81,7 @@ function renderAgenda() {
   }
   $('#agGrid').innerHTML = cellen.join('');
   renderDag(dag[AG_DAG]);
+  renderSync();
 }
 
 function naarMaand(stap) {
@@ -101,6 +114,7 @@ function planCard(p) {
     <div class="taskrow"><div class="grow">
       <div class="meta">${p.gedaan ? '<span class="ok">✓ gedaan' + (p.entry_datum ? ' op ' + fmtDate(p.entry_datum) : '') + '</span>'
         : teLaat ? `<span class="laat">gepland ${fmtDate(p.datum)}</span>` : '<span>gepland</span>'}
+        ${p.tijd ? `<span>${p.tijd}${p.duur_minuten ? ' · ' + fmtDur(p.duur_minuten) : ''}</span>` : ''}
         ${chip(p.taak_categorie)} ${chip(p.task_id && '⟳ onderhoudstaak')}</div>
       <h3>${esc(p.titel)}</h3>
       ${als(p.notitie, `<p class="desc">${esc(p.notitie)}</p>`)}
@@ -119,18 +133,27 @@ const verwachtCard = t => `<article class="card s-${t.status}" data-taak="${t.id
     <button type="button" class="btn primary" data-taakuit="${t.id}">${uitvoerLabel(t)}</button></div>
   </article>`;
 
-function renderDag(x = {log: [], plan: [], verwacht: []}) {
+const externCard = a => `<article class="card agextern">
+    <div class="meta"><span>${a.tijd ? `${a.tijd}–${a.eindtijd}` : 'hele dag'}</span>
+      ${a.einddatum !== a.datum ? `<span>${fmtDate(a.datum)} – ${fmtDate(a.einddatum)}</span>` : ''}</div>
+    <h3>${esc(a.titel)}</h3>
+    ${a.locatie ? `<div class="due">📍 ${esc(a.locatie)}</div>` : ''}
+    ${a.omschrijving ? `<p class="desc">${esc(a.omschrijving)}</p>` : ''}
+  </article>`;
+
+function renderDag(x = {log: [], plan: [], verwacht: [], extern: []}) {
   const nu = today();
   // vandaag: ook wat eerder gepland was en nog open staat
   const eerder = AG_DAG === nu ? AG_OPEN.filter(p => p.datum < nu) : [];
   const blok = (titel, html) => als(html, `<h3 class="agkopje">${titel}</h3>${html}`);
-  const alles = eerder.length + x.plan.length + x.verwacht.length + x.log.length;
+  const alles = eerder.length + x.plan.length + x.verwacht.length + x.log.length + x.extern.length;
   $('#agDag').innerHTML = `
     <div class="agdagkop"><h2>${dagLang(AG_DAG)}</h2>
       <button type="button" class="btn" id="agPlanNieuw">+ Inplannen</button></div>
     ${blok('Nog open van eerder', eerder.map(planCard).join(''))}
     ${blok('Gepland', x.plan.map(planCard).join(''))}
     ${blok('Verwacht volgens interval', x.verwacht.map(verwachtCard).join(''))}
+    ${blok('Agenda' + (AG_KOPPELING?.kalender_naam ? ' (' + esc(AG_KOPPELING.kalender_naam) + ')' : ''), x.extern.map(externCard).join(''))}
     ${blok('Logboek', x.log.map(entryCard).join(''))}
     ${als(!alles, leeg('Niets op deze dag.<br>Tik op <b>+ Inplannen</b> om een taak of afspraak in te plannen.'))}`;
 }
@@ -173,6 +196,9 @@ function openPlanning(p = null, preset = {}) {
   $('#planTitle').textContent = p ? 'Planning bewerken' : 'Inplannen';
   $('#planDelete').hidden = !p;
   f.datum.value = v.datum || today();
+  f.tijd.value = v.tijd || '';
+  f.duur.value = durInput(v.duur_minuten);
+  planDuurZichtbaar();
   f.task_id.value = v.task_id || '';
   if (v.task_id && f.task_id.value === '') {   // inactieve taak: toch tonen
     const t = agTaak(v.task_id);
@@ -196,11 +222,15 @@ function planTitelHint() {
 }
 $('#planForm [name=task_id]').addEventListener('change', planTitelHint);
 
+// duur alleen bij een tijd (zonder tijd is het een afspraak van een hele dag)
+const planDuurZichtbaar = () => { $('#planDuur').hidden = !$('#planForm').tijd.value; };
+$('#planForm [name=tijd]').addEventListener('input', planDuurZichtbaar);
+
 $('#planForm').addEventListener('submit', async ev => {
   ev.preventDefault();
   const f = ev.target;
-  const body = {datum: f.datum.value, task_id: f.task_id.value ? +f.task_id.value : null, titel: f.titel.value,
-    notitie: f.notitie.value, afgevinkt: f.afgevinkt.checked};
+  const body = {datum: f.datum.value, tijd: f.tijd.value, duur: f.tijd.value ? f.duur.value : '',
+    task_id: f.task_id.value ? +f.task_id.value : null, titel: f.titel.value, notitie: f.notitie.value, afgevinkt: f.afgevinkt.checked};
   try {
     await api(agEditing ? 'api/planning/' + agEditing.id : 'api/planning', json(agEditing ? 'PUT' : 'POST', body));
     $('#planDlg').close(); toast('Ingepland');
@@ -218,3 +248,36 @@ $('#planDelete').addEventListener('click', async () => {
     await verversAlles();
   } catch (e) { toast(e.message); }
 });
+
+// ---------------------------------------------------------------- koppeling met de agenda (iCloud/Google)
+function renderSync() {
+  const k = AG_KOPPELING, el = $('#agSync');
+  if (!k) return;
+  $('#agLegExtern').hidden = !(k.account && k.kalender);
+  if (!k.account || !k.kalender) {
+    el.innerHTML = 'Koppel je iCloud- of Google-agenda via <a href="#" data-naar="settings">Instellingen › Agenda</a>.';
+    return;
+  }
+  const st = k.status;
+  el.innerHTML = `Gekoppeld met <b>${esc(k.kalender_naam || 'agenda')}</b>` +
+    (st ? (st.ok ? ` · bijgewerkt ${fmtStamp(st.tijd)}` : ` · <span class="bad">synchroniseren mislukt: ${esc(st.fout)}</span>`) : '') +
+    ' · <a href="#" id="agSyncNu">nu synchroniseren</a>';
+}
+
+let agSyncBezig = false;
+async function syncAgenda(stil = false) {
+  if (agSyncBezig) return;
+  agSyncBezig = true;
+  try {
+    const k = await api('api/agenda/sync', {method: 'POST'});
+    if (!stil) toast(k.status?.ok ? 'Agenda bijgewerkt' : 'Synchroniseren mislukt: ' + (k.status?.fout || ''));
+    await laadAgenda();
+  } catch (e) { if (!stil) toast(e.message); }
+  finally { agSyncBezig = false; }
+}
+
+$('#agSync').addEventListener('click', ev => {
+  if (ev.target.id === 'agSyncNu') { ev.preventDefault(); toast('Bezig met synchroniseren…'); syncAgenda(); }
+  if (ev.target.dataset.naar) { ev.preventDefault(); show(ev.target.dataset.naar); }
+});
+

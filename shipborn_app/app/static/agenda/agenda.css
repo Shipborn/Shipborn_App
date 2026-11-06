@@ -35,3 +35,11 @@
   .agdag .item{font-size:0;height:5px;padding:0;border-left-width:0;background:var(--c)}
   .agdag .meer{font-size:10px}
 }
+.ag-extern{--c:#7a5bc7}
+@media (prefers-color-scheme:dark){.ag-extern{--c:#b39af0}}
+.agextern{cursor:default;border-left:4px solid #7a5bc7}
+.agextern:hover{border-color:var(--line);border-left-color:#7a5bc7}
+.agsync{margin:16px 2px 0}
+.agsync .bad{color:var(--bad)}
+.agsync a{color:var(--accent)}
+

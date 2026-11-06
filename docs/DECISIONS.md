@@ -52,3 +52,13 @@
 - **Afronden via de logregel**: een nieuwe logregel bij de taak rondt het geplande punt af (het gekozen punt, anders het oudste open punt van die taak). Een uitvoering van een stappenplan krijgt geen `planning_id` mee (max. één per taak, dus het oudste open punt is vrijwel altijd het bedoelde). Wordt de logregel verwijderd, dan staat het punt weer open (`entry_id` → NULL). Losse punten worden afgevinkt.
 - **Verwachte datum uit het interval** wordt alleen getoond (niet opgeslagen) en verdwijnt zodra de taak is ingepland; intervallen op uren hebben geen datum en staan niet in de agenda.
 - Eerst per ongeluk gebouwd en gepusht in de oude repo `Shipborn/ha-logboek` (0.17.0); daarna overgezet naar deze app en daar teruggedraaid naar 0.16.0.
+
+## 2026-11-06 – Agenda koppelen met iCloud/CalDAV en Google (1.4.0)
+- Eerst gebouwd in `Shipborn/ha-logboek` (branch `agenda-google-icloud`) en daarna hier ingebouwd in de agenda van 1.3.0.
+- **Rechtstreeks via CalDAV en de Google Calendar API** (keuze gebruiker) i.p.v. een ICS-abonnement (één richting, publieke URL nodig) of de agenda-integraties van HA (kunnen alleen aanmaken, niet wijzigen/verwijderen). Google via de API i.p.v. Google-CalDAV (alleen If-Match, vraagt sync-collection).
+- **Eigen kleine CalDAV-client** (requests + ElementTree): de `caldav`-bibliotheek vraagt `lxml`, lastig op Alpine/armv7. Wel `icalendar` en `recurring-ical-events` (pure Python).
+- **Eén vorm voor beide diensten** (`kalender.py`), zodat de sync-logica één keer bestaat. Planning twee richtingen (bij een wijziging aan beide kanten wint de app; in de agenda verwijderd = ook in de app weg), logregels alleen app → agenda (een registratie wijzig je in de app). Bijwerken op basis van de bestaande afspraak, zodat herinneringen blijven.
+- **Planning kreeg tijd en duur**: anders zou een tijd die op de telefoon wordt ingesteld bij de volgende wijziging in de app verloren gaan. `updated_at` in microseconden: met seconden werden wijzigingen vlak na een sync gemist.
+- **Inloggegevens als app-opties en het Google-token in `/data`**, niet in de database: die wordt naar `/share` gekopieerd en is daar ook voor andere apps en Samba leesbaar.
+- **Google: eigen OAuth-client van de gebruiker en het localhost-adres terugplakken**. De device flow staat de agenda-scope niet toe, en een vaste redirect naar de app kan niet (het ingress-adres verandert per sessie). De gebruiker moet het toestemmingsscherm op In productie zetten, anders verloopt de koppeling na 7 dagen.
+

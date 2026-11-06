@@ -23,3 +23,10 @@
 ## Volgende stappen
 1. In HA bijwerken naar 1.3.0 en de agenda proberen; ook parallelle uitvoeringen en taak kopiëren op de telefoon testen.
 2. Open vragen: stappenplan in de taak-PDF? Bestede tijd alleen tellen als de uitvoering open is? Inhoud van Reizen? Git i.p.v. datummappen?
+
+## 1.4.0 (2026-11-06, niet gecommit)
+- Agenda gekoppeld aan iCloud/CalDAV of Google Agenda (Instellingen › Agenda); planning met tijd en duur.
+- Getest met Radicale en nep-Google via de API: omzetting van 1.3.0, versturen, afvinken, wijzigen/verwijderen op de telefoon, uitvoeren, Google koppelen.
+- In de browser gecontroleerd: agenda met tijd, afspraken uit de agenda, planningsdialoog, Instellingen › Agenda.
+- **Nog niet getest:** met echte iCloud/Google, in Home Assistant en de Docker-build (nieuwe pakketten `icalendar`, `recurring-ical-events`). Bij Google aangenomen: `events/import` zet een eerder verwijderde afspraak terug, PATCH met `null` voor date/dateTime wisselt tussen hele dag en tijd.
+
