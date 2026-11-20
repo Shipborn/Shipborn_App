@@ -77,3 +77,4 @@
 - **Sessie verloopt na 15 min zonder wijziging** (wens gebruiker), niet zonder activiteit: alleen POST/PUT/DELETE verlengen. Token in `localStorage`, zodat weg en terug (ander HA-paneel, iframe herladen) binnen die tijd geen nieuwe inlog vraagt.
 - **Alleen wijzigingen worden op de server afgedwongen**; lezen (GET) niet, want PDF-, CSV- en fotolinks kunnen geen header meesturen en de app is al alleen via HA (ingress) bereikbaar. Het inlogscherm dekt de pagina wel af.
 - **Verlopen tijdens invullen verliest niets**: `api()` toont bij 401 het inlogscherm en stuurt daarna hetzelfde verzoek opnieuw.
+- (1.6.1) **Alleen de app-gebruiker telt** (wens gebruiker): `current_user()` valt niet meer terug op de HA-gebruiker uit de ingress-headers. Zonder gebruikers blijft "ingevoerd door" leeg. "Uitgevoerd door" is standaard de ingelogde gebruiker.

@@ -93,7 +93,8 @@ function openEntry(entry = null, preset = {}) {
     if (t) { f.task_id.insertAdjacentHTML('beforeend', `<option value="${t.id}">${esc(t.naam)}</option>`); f.task_id.value = t.id; }
   }
   f.titel.value = v.titel || '';
-  f.uitgevoerd_door.value = v.uitgevoerd_door || '';
+  // nieuwe logregel: standaard uitgevoerd door wie is ingelogd (aan te passen, bijv. werf of monteur)
+  f.uitgevoerd_door.value = entry ? v.uitgevoerd_door || '' : v.uitgevoerd_door || SESSIE.gebruiker || '';
   f.duur.value = durInput(v.duur_minuten);
   const st = $('#entryStamp');
   st.hidden = !entry?.created_at;

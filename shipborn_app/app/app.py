@@ -39,7 +39,7 @@ from PIL import Image, ImageOps
 
 import kalender
 
-VERSION = "1.6.0"
+VERSION = "1.6.1"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("shipborn")
@@ -547,16 +547,11 @@ def fmt_minutes(m):
 
 
 def current_user():
-    """Naam van wie in de app is ingelogd, anders van de HA-gebruiker (de Supervisor zet deze headers bij ingress)."""
+    """Naam van wie in de app is ingelogd (Instellingen › Gebruikers). De HA-gebruiker wordt niet meer gebruikt:
+    zonder ingelogde gebruiker (inloggen uit) blijft 'ingevoerd door' leeg."""
     if not has_request_context():
         return None
-    if getattr(g, "gebruiker", None):
-        return g.gebruiker["naam"]
-    for h in ("X-Remote-User-Display-Name", "X-Remote-User-Name"):
-        v = text(request.headers.get(h))
-        if v:
-            return v
-    return None
+    return g.gebruiker["naam"] if getattr(g, "gebruiker", None) else None
 
 
 def entry_from_form(form):
@@ -2103,7 +2098,7 @@ def api_uitvoering_afronden(uid):
             "omschrijving": "\n".join([f"Uitgevoerd volgens stappenplan ({len(stappen)} "
                                        f"{'stap' if len(stappen) == 1 else 'stappen'})."] + opm),
             "motoruren": uren["hoofdmotor"], "generator_uren": uren["generator"], "kosten": None,
-            "uitgevoerd_door": None, "duur_minuten": minuten, "task_id": u["task_id"]})
+            "uitgevoerd_door": current_user(), "duur_minuten": minuten, "task_id": u["task_id"]})
         for f in u["fotos"]:   # bestanden blijven waar ze staan, alleen de koppeling verhuist
             conn.execute("INSERT INTO photos (entry_id, bestand, thumb, omschrijving, created_at) VALUES (?,?,?,?,?)",
                          (eid, f["bestand"], f["thumb"], f"Stap {f['stap'] + 1} – {stappen[f['stap']]['titel']}", now()))
