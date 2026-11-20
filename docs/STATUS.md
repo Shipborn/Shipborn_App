@@ -1,9 +1,9 @@
 # Status
 
-**Versie 1.5.0**, op GitHub (`main`, 2026-11-20). Werkmap `261106` in Dropbox is 1.4.0.
+**Versie 1.6.0**, op GitHub (`main`, 2026-11-20). Werkmap `261106` in Dropbox is 1.4.0.
 
 ## Stand van GitHub (`Shipborn/Shipborn_App`)
-- `main` = **1.5.0** (systemen, 2026-11-20); 1.4.0 = PR #1, merge-commit `b77a620`, = de inhoud van `261106` zonder `voorbeeld/`. 1.3.0 en 1.4.0 zijn gemaakt in een git-checkout (`~/Projects/Shipborn_App` op de Mac) en niet in een datummap.
+- `main` = **1.6.0** (inloggen, 2026-11-20); 1.5.0 = systemen; 1.4.0 = PR #1, merge-commit `b77a620`, = de inhoud van `261106` zonder `voorbeeld/`. 1.3.0 en 1.4.0 zijn gemaakt in een git-checkout (`~/Projects/Shipborn_App` op de Mac) en niet in een datummap.
 - `Shipborn/ha-logboek` blijft op 0.16.0. Daar staat nog een gepushte branch `agenda-google-icloud` (eerste versie van de koppeling, per ongeluk in die repo): mag weg, wacht op akkoord van de gebruiker.
 
 ## Gedaan
@@ -18,6 +18,7 @@
   - **Ingepland op** (datum + tijd) in de taakdialoog: maakt/verzet/verwijdert het eerstvolgende geplande punt.
   - Getest met Radicale (CalDAV) en `tools/nep_google.py`: omzetting van een 1.3.0-database, versturen, afvinken, wijzigen/verwijderen in de agenda, uitvoeren, Google koppelen/ontkoppelen, verlopen token, taken naar de agenda, vaste datum. In de browser: agenda, planningsdialoog, taakdialoog, Instellingen.
 - 1.5.0: **Systemen** bundelen categorieën: beheer in Onderhoud › Categorieën (systeem als kop, categorieën eronder, ✎ om een categorie te verplaatsen), dialoog en PDF per systeem, keuzelijsten per systeem gegroepeerd, logboekfilter op een heel systeem, "Systeem › Categorie" bij logregels/taken/agenda, CSV-kolom Systeem. Lokaal getest (nieuwe database met de standaardcategorieën): toevoegen, dubbele naam, verplaatsen, volgorde binnen groep en van systemen, verwijderen, filter, dialoog, PDF, CSV, telefoonbreedte; omzetting van een 1.4.0-database (kolom `systeem_id` erbij, data blijft, twee keer starten gaat goed).
+- 1.6.0: **Inloggen** met naam + pincode (Instellingen › Gebruikers); aan zodra er een gebruiker is. Wie iets invoert/wijzigt wordt de ingelogde gebruiker. Na 15 min (optie `login_minutes`) zonder wijziging opnieuw inloggen; verlopen tijdens invullen → inloggen en daarna toch opgeslagen. Noodknop `login_reset`. Lokaal getest (met `login_minutes: 1`): eerste gebruiker meteen ingelogd, herladen blijft ingelogd, verlopen → inlogscherm, verkeerde pincode, blokkade na 5 fouten, opslaan na opnieuw inloggen (logregel "door Piet"), pincode wijzigen, laatste gebruiker weg → inloggen uit, `login_reset`, telefoonbreedte.
 
 ## Niet gedaan / niet getest
 - 1.4.0 **niet getest met echte iCloud/Google, niet in HA en niet in de Docker-build** (nieuwe pakketten `icalendar`, `recurring-ical-events`). Bij Google aangenomen (alleen nep-server): `events/import` zet een eerder verwijderde afspraak terug; PATCH met `null` voor date/dateTime wisselt tussen hele dag en tijd.
@@ -27,6 +28,7 @@
 - Twee apparaten tegelijk in dezelfde uitvoering: laatste schrijfactie wint. Duur = wandkloktijd van start tot afronden.
 - Het stappenplan staat niet in de taak-PDF; geüploade maar nooit opgeslagen uitlegafbeeldingen blijven als wees staan.
 - Systemen (1.5.0): niet in HA getest; systemen staan (nog) niet in de taak- of logregel-PDF, de dagmail en de agenda-sync.
+- Inloggen (1.6.0): niet getest in HA (ingress, Android-app, localStorage in de HA-webview); lezen is niet afgeschermd op de server (alleen het scherm); geen rechtenverschil tussen gebruikers.
 - Module Reizen is nog een lege placeholder. `voorbeeld/` alleen in de werkmap; niet publiceren.
 
 ## Volgende stappen

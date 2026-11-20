@@ -16,8 +16,21 @@ const json = (method, body) => ({method, headers: {'Content-Type': 'application/
 
 let CFG = {categories: []}, TAB = null;
 
-async function api(path, opts = {}) {
-  const r = await fetch(path, opts);
+// Stuurt de sessie mee (inloggen.js). Uitgelogd bij een wijziging: inlogscherm, daarna hetzelfde verzoek opnieuw.
+async function api(path, opts = {}, opnieuw = true) {
+  const headers = {...(opts.headers || {})};
+  if (SESSIE.token) headers['X-Sessie'] = SESSIE.token;
+  const r = await fetch(path, {...opts, headers});
+  sessieRest(r.headers.get('X-Sessie-Rest'));
+  if (r.status === 401 && opnieuw) {
+    let uit = null;
+    try { uit = await r.clone().json(); } catch (_) {}
+    if (uit?.inloggen) {
+      await sessieLaden();
+      if (!SESSIE.gebruiker) await inloggen('Je bent uitgelogd. Log opnieuw in; daarna wordt je wijziging opgeslagen.');
+      return api(path, opts, false);
+    }
+  }
   if (!r.ok) {
     let msg = r.statusText;
     try { msg = (await r.json()).error || msg; } catch (_) {}
@@ -138,6 +151,7 @@ async function start() {
   $('#fab').addEventListener('click', () => TABBLADEN[TAB]?.nieuw?.());
   show(...location.hash.slice(1).split('/'));
   try {
+    await sessieStart();
     await loadConfig();
     await alle('laden');
   } catch (e) { toast('Laden mislukt: ' + e.message); }

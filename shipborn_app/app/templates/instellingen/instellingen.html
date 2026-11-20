@@ -1,4 +1,15 @@
 <section id="view-settings" hidden>
+  <div class="card instset" id="gebruikersKaart">
+    <h3>Gebruikers</h3>
+    <p class="hint" id="gebruikersUitleg"></p>
+    <div id="gebruikersLijst"></div>
+    <form class="gbadd" id="gebruikerAdd" autocomplete="off">
+      <input name="naam" placeholder="Naam" maxlength="40" required autocomplete="off">
+      <input name="pin" type="password" inputmode="numeric" placeholder="Pincode (min. 4 cijfers)" required autocomplete="new-password">
+      <button type="submit" class="btn primary">Gebruiker toevoegen</button>
+    </form>
+  </div>
+
   <form class="card instset" id="urenForm">
     <h3>Urentellers</h3>
     <p class="hint">Kies de sensoren in Home Assistant met de draaiuren. De stand wordt bij elke logregel vastgelegd, staat bovenaan de app en telt mee voor taken met een interval in uren.</p>

@@ -1,8 +1,77 @@
-// Instellingen: urentellers (hoofdmotor, generator), de gekoppelde agenda en het logo
+// Instellingen: gebruikers (inloggen), urentellers (hoofdmotor, generator), de gekoppelde agenda en het logo
 // (ook in de kop van de app, in elke PDF en in de dagmail).
 tabblad('settings', {
   config: () => showLogo(),
-  toon: () => { loadUren(); loadAgendaInst(); },
+  toon: () => { loadGebruikers(); loadUren(); loadAgendaInst(); },
+});
+
+// ---------------------------------------------------------------- gebruikers
+// Zonder gebruikers staat inloggen uit; de eerste gebruiker zet het aan en wie hem maakt, is meteen ingelogd.
+let GB_PIN = null;   // id van de gebruiker waarvan de pincode gewijzigd wordt
+
+async function loadGebruikers() {
+  const lijst = await api('api/gebruikers');
+  $('#gebruikersUitleg').innerHTML = lijst.length
+    ? `Iedereen logt in met naam en pincode; bij elke logregel staat wie hem heeft ingevoerd of gewijzigd. Na
+       ${SESSIE.minuten} minuten zonder wijziging moet je opnieuw inloggen.`
+    : `Inloggen staat uit. Voeg gebruikers toe om bij te houden wie iets invoert: daarna logt iedereen in met naam en
+       pincode. Jij bent meteen ingelogd als de eerste gebruiker die je toevoegt.`;
+  $('#gebruikersLijst').innerHTML = lijst.map(u => `
+    <div class="gbrij" data-id="${u.id}">
+      <div class="info"><b>${esc(u.naam)}</b>${u.naam === SESSIE.gebruiker ? ' <span class="chip">ingelogd</span>' : ''}
+        <span class="hint">${u.logregels} logregel${u.logregels === 1 ? '' : 's'} ingevoerd</span></div>
+      ${GB_PIN === u.id
+        ? `<input type="password" inputmode="numeric" class="gbpin" placeholder="Nieuwe pincode" autocomplete="new-password">
+           <button type="button" class="btn primary" data-act="pinok">Opslaan</button>
+           <button type="button" class="btn" data-act="pinweg">Annuleren</button>`
+        : `<button type="button" class="btn" data-act="pin">Pincode wijzigen</button>
+           <button type="button" class="btn danger" data-act="weg">Verwijderen</button>`}
+    </div>`).join('');
+  $('#gebruikersLijst .gbpin')?.focus();
+}
+
+$('#gebruikerAdd').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const f = ev.target;
+  try {
+    const r = await api('api/gebruikers', json('POST', {naam: f.naam.value, pin: f.pin.value}));
+    f.reset();
+    if (r.token) {
+      zetSessie(r.token, r.gebruiker, r.rest);
+      await sessieLaden();
+      toast(`Inloggen staat aan; je bent ingelogd als ${r.gebruiker}`);
+    } else { await sessieLaden(); toast('Gebruiker toegevoegd'); }
+    loadGebruikers();
+  } catch (e) { toast(e.message); }
+});
+
+$('#gebruikersLijst').addEventListener('click', async ev => {
+  const act = ev.target.dataset.act, rij = ev.target.closest('.gbrij');
+  if (!act) return;
+  const id = +rij.dataset.id, naam = $('b', rij).textContent;
+  try {
+    if (act === 'pin') { GB_PIN = id; return loadGebruikers(); }
+    if (act === 'pinweg') { GB_PIN = null; return loadGebruikers(); }
+    if (act === 'pinok') {
+      await api('api/gebruikers/' + id, json('PUT', {pin: $('.gbpin', rij).value}));
+      GB_PIN = null; toast(`Pincode van ${naam} gewijzigd`);
+      return loadGebruikers();
+    }
+    if (act === 'weg') {
+      const laatste = $$('#gebruikersLijst .gbrij').length === 1;
+      if (!confirm(`${naam} verwijderen?` + (laatste ? ' Dit is de laatste gebruiker: inloggen gaat dan uit.'
+        : ' Logregels van ' + naam + ' blijven staan.'))) return;
+      await api('api/gebruikers/' + id, {method: 'DELETE'});
+      await sessieLaden();
+      toast(`${naam} verwijderd`);
+      if (SESSIE.inlog && !SESSIE.gebruiker) await inloggen();
+      loadGebruikers();
+    }
+  } catch (e) { toast(e.message); }
+});
+
+$('#gebruikersLijst').addEventListener('keydown', ev => {
+  if (ev.key === 'Enter' && ev.target.classList.contains('gbpin')) { ev.preventDefault(); $('[data-act=pinok]', ev.target.closest('.gbrij')).click(); }
 });
 
 // ---------------------------------------------------------------- urentellers

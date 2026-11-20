@@ -15,6 +15,7 @@
     <img id="logo" alt="" hidden>
     <h1 id="title">Shipborn App</h1>
     <span class="pill" id="hours" hidden></span>
+    <button type="button" class="pill wie" id="wie" hidden></button>
   </div>
   <nav class="mods">
     {% for id, naam, tabs in modules %}<button class="mod" data-mod="{{ id }}">{{ naam }}<span class="count" hidden></span></button>
@@ -40,7 +41,18 @@
 <datalist id="haEntities"></datalist>
 <div class="toast" id="toast"></div>
 
-{% for f in ["gedeeld/basis.js", "gedeeld/ui.js", "gedeeld/ha.js", "gedeeld/fotos.js"] + js %}<script src="static/{{ f }}?v={{ versie }}"></script>
+<dialog id="inlogDlg" class="inlog">
+  <form id="inlogForm" autocomplete="off">
+    <h2>Inloggen</h2>
+    <p class="hint" id="inlogMelding" hidden></p>
+    <div class="inlognamen" id="inlogNamen" role="radiogroup" aria-label="Wie ben je?"></div>
+    <label>Pincode<input type="password" id="inlogPin" inputmode="numeric" autocomplete="off" required></label>
+    <p class="inlogfout" id="inlogFout" role="alert"></p>
+    <button type="submit" class="btn primary">Inloggen</button>
+  </form>
+</dialog>
+
+{% for f in ["gedeeld/basis.js", "gedeeld/inloggen.js", "gedeeld/ui.js", "gedeeld/ha.js", "gedeeld/fotos.js"] + js %}<script src="static/{{ f }}?v={{ versie }}"></script>
 {% endfor %}
 <script>start();</script>
 </body>

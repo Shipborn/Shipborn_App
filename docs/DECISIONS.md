@@ -70,3 +70,10 @@
 - **Logregels en taken blijven aan de categorie gekoppeld** (bestaande kolom met de naam); het systeem wordt afgeleid. Daardoor verandert er niets aan bestaande data, sync, PDF, MQTT en dagmail, en verhuist een categorie met al haar logregels als je haar in een ander systeem zet.
 - **Systeem verwijderen laat de categorieën staan** (zonder systeem), net zoals een categorie verwijderen de logregels laat staan.
 - Beheer in het bestaande tabblad Categorieën (systemen als kop, categorieën eronder), niet in een apart tabblad.
+
+## 2026-11-20 – Inloggen in de app (1.6.0)
+- **Eigen gebruikers met naam + pincode** naast het HA-account (wens gebruiker: bijhouden wie iets invoert, ook als meerdere mensen één HA-account/tablet delen). Pincode in plaats van wachtwoord: snel op een tablet aan boord; pbkdf2 met salt en na 5 fouten 30 s wachten.
+- **Aan zodra er een gebruiker is**: bestaande installaties werken na de update zoals voorheen; de eerste gebruiker is meteen ingelogd, zodat je jezelf niet buitensluit. Noodknop: optie `login_reset`.
+- **Sessie verloopt na 15 min zonder wijziging** (wens gebruiker), niet zonder activiteit: alleen POST/PUT/DELETE verlengen. Token in `localStorage`, zodat weg en terug (ander HA-paneel, iframe herladen) binnen die tijd geen nieuwe inlog vraagt.
+- **Alleen wijzigingen worden op de server afgedwongen**; lezen (GET) niet, want PDF-, CSV- en fotolinks kunnen geen header meesturen en de app is al alleen via HA (ingress) bereikbaar. Het inlogscherm dekt de pagina wel af.
+- **Verlopen tijdens invullen verliest niets**: `api()` toont bij 401 het inlogscherm en stuurt daarna hetzelfde verzoek opnieuw.

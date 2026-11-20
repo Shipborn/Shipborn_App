@@ -8,6 +8,7 @@ Koppeling naar HA: motoruren via de Core API, taakstatus via MQTT discovery.
 import base64
 import csv
 import hashlib
+import hmac
 import html
 import io
 import json
@@ -33,12 +34,12 @@ from zoneinfo import ZoneInfo
 import requests
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
-from flask import Flask, Response, abort, jsonify, render_template, request, send_from_directory
+from flask import Flask, Response, abort, g, has_request_context, jsonify, render_template, request, send_from_directory
 from PIL import Image, ImageOps
 
 import kalender
 
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("shipborn")
@@ -77,6 +78,8 @@ DEFAULT_OPTIONS = {
     "caldav_password": "",
     "google_client_id": "",
     "google_client_secret": "",
+    "login_minutes": 15,
+    "login_reset": False,
 }
 
 
@@ -157,6 +160,20 @@ CREATE TABLE IF NOT EXISTS categories (
     volgorde INTEGER NOT NULL DEFAULT 0
 );
 -- systemen bundelen categorieën (categories.systeem_id); een categorie hoort bij hoogstens één systeem
+-- gebruikers van de app (inloggen met naam + pincode); geen gebruikers = inloggen staat uit
+CREATE TABLE IF NOT EXISTS gebruikers (
+    id INTEGER PRIMARY KEY,
+    naam TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    pin_hash TEXT NOT NULL,
+    created_at TEXT
+);
+-- ingelogde apparaten; laatst = tijd (epoch) van de laatste wijziging, verloopt na login_minutes zonder wijziging
+CREATE TABLE IF NOT EXISTS sessies (
+    token TEXT PRIMARY KEY,
+    gebruiker_id INTEGER NOT NULL REFERENCES gebruikers(id) ON DELETE CASCADE,
+    laatst REAL NOT NULL,
+    gemaakt TEXT
+);
 CREATE TABLE IF NOT EXISTS systemen (
     id INTEGER PRIMARY KEY,
     naam TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -291,6 +308,9 @@ def init_db():
         for (pid,) in conn.execute("SELECT id FROM planning WHERE uid IS NULL").fetchall():
             conn.execute("UPDATE planning SET uid = ?, updated_at = COALESCE(updated_at, created_at, ?) WHERE id = ?",
                          ("shipborn-plan-" + uuid.uuid4().hex, now(), pid))
+        if OPT.get("login_reset"):
+            conn.execute("DELETE FROM gebruikers")
+            log.warning("login_reset staat aan: alle gebruikers verwijderd, inloggen staat uit. Zet de optie weer uit.")
         if conn.execute("SELECT COUNT(*) FROM categories").fetchone()[0] == 0:
             # eerste start: vullen met de categorieën uit de instellingen + alles wat al gebruikt is
             names = list(OPT.get("categories") or [])
@@ -527,7 +547,11 @@ def fmt_minutes(m):
 
 
 def current_user():
-    """Naam van de ingelogde HA-gebruiker; de Supervisor zet deze headers bij ingress."""
+    """Naam van wie in de app is ingelogd, anders van de HA-gebruiker (de Supervisor zet deze headers bij ingress)."""
+    if not has_request_context():
+        return None
+    if getattr(g, "gebruiker", None):
+        return g.gebruiker["naam"]
     for h in ("X-Remote-User-Display-Name", "X-Remote-User-Name"):
         v = text(request.headers.get(h))
         if v:
@@ -804,6 +828,192 @@ app.config["MAX_CONTENT_LENGTH"] = 300 * 1024 * 1024
 @app.errorhandler(413)
 def json_error(e):
     return jsonify(error=getattr(e, "description", str(e))), e.code
+
+
+# --------------------------------------------------------------------------- inloggen
+# Zodra er gebruikers zijn, vraagt elke wijziging (POST/PUT/DELETE op api/...) een geldige sessie (header X-Sessie).
+# Een sessie verloopt na login_minutes zonder wijziging; elke wijziging verlengt hem. Lezen (GET) mag zonder:
+# de app is alleen bereikbaar via Home Assistant, en PDF-/foto-links kunnen geen header meesturen.
+# Met login_reset worden bij het starten alle gebruikers verwijderd (pincode van iedereen kwijt).
+
+SESSIE_VRIJ = {"/api/inloggen", "/api/uitloggen", "/api/agenda/sync"}   # geen sessie nodig en verlengen niet
+MISLUKT = {}          # naam (kleine letters) -> [aantal, tijd laatste poging]: na 5 fouten 30 s wachten
+MISLUKT_LOCK = threading.Lock()
+
+
+def sessie_seconden():
+    return max(1, int(OPT.get("login_minutes") or 15)) * 60
+
+
+def pin_hash(pin):
+    salt = secrets.token_hex(16)
+    return salt + "$" + hashlib.pbkdf2_hmac("sha256", pin.encode(), bytes.fromhex(salt), 120_000).hex()
+
+
+def pin_ok(pin, opgeslagen):
+    salt, h = opgeslagen.split("$", 1)
+    return hmac.compare_digest(h, hashlib.pbkdf2_hmac("sha256", pin.encode(), bytes.fromhex(salt), 120_000).hex())
+
+
+def inlog_aan(conn):
+    return conn.execute("SELECT 1 FROM gebruikers LIMIT 1").fetchone() is not None
+
+
+def sessie_van(conn, token):
+    """Gebruiker bij een geldige sessie ({id, naam, rest}), anders None."""
+    if not token:
+        return None
+    row = conn.execute("SELECT s.laatst, u.id, u.naam FROM sessies s JOIN gebruikers u ON u.id = s.gebruiker_id "
+                       "WHERE s.token = ?", (token,)).fetchone()
+    if not row:
+        return None
+    rest = row["laatst"] + sessie_seconden() - time.time()
+    return {"id": row["id"], "naam": row["naam"], "rest": rest} if rest > 0 else None
+
+
+def nieuwe_sessie(conn, gebruiker_id):
+    token = secrets.token_urlsafe(32)
+    conn.execute("DELETE FROM sessies WHERE laatst < ?", (time.time() - sessie_seconden(),))
+    conn.execute("INSERT INTO sessies (token, gebruiker_id, laatst, gemaakt) VALUES (?,?,?,?)",
+                 (token, gebruiker_id, time.time(), now()))
+    return token
+
+
+@app.before_request
+def controleer_sessie():
+    g.gebruiker = None
+    token = request.headers.get("X-Sessie")
+    wijziging = request.method in ("POST", "PUT", "DELETE", "PATCH") and request.path.startswith("/api/")
+    if request.path in SESSIE_VRIJ or not (wijziging or token):
+        return None
+    with get_db() as conn:
+        s = sessie_van(conn, token)
+        if s and wijziging:
+            conn.execute("UPDATE sessies SET laatst = ? WHERE token = ?", (time.time(), token))
+            s["rest"] = sessie_seconden()
+        if s:
+            g.gebruiker = s
+        elif wijziging and inlog_aan(conn):
+            return jsonify(error="Je bent uitgelogd; log opnieuw in", inloggen=True), 401
+    return None
+
+
+@app.after_request
+def sessie_rest(resp):
+    # resterende seconden, zodat de browser weet wanneer hij het inlogscherm moet tonen
+    if getattr(g, "gebruiker", None):
+        resp.headers["X-Sessie-Rest"] = str(int(g.gebruiker["rest"]))
+    return resp
+
+
+def gebruikers_namen(conn):
+    return [r["naam"] for r in conn.execute("SELECT naam FROM gebruikers ORDER BY naam COLLATE NOCASE")]
+
+
+@app.get("/api/sessie")
+def api_sessie():
+    with get_db() as conn:
+        return jsonify(inlog=inlog_aan(conn), gebruikers=gebruikers_namen(conn), minuten=sessie_seconden() // 60,
+                       gebruiker=g.gebruiker["naam"] if g.gebruiker else None,
+                       rest=int(g.gebruiker["rest"]) if g.gebruiker else None)
+
+
+@app.post("/api/inloggen")
+def api_inloggen():
+    d = request.get_json(force=True) or {}
+    naam, pin = text(d.get("naam")), str(d.get("pin") or "")
+    sleutel = (naam or "").lower()
+    with MISLUKT_LOCK:
+        n, t = MISLUKT.get(sleutel, (0, 0))
+        if n >= 5 and time.time() - t < 30:
+            abort(400, f"Te vaak een verkeerde pincode; probeer het over {int(30 - (time.time() - t)) + 1} seconden opnieuw")
+    with get_db() as conn:
+        row = conn.execute("SELECT id, naam, pin_hash FROM gebruikers WHERE naam = ?", (naam or "",)).fetchone()
+        if not row or not pin_ok(pin, row["pin_hash"]):
+            with MISLUKT_LOCK:
+                MISLUKT[sleutel] = ((0 if n >= 5 else n) + 1, time.time())   # na de wachttijd opnieuw 5 pogingen
+            abort(400, "Onbekende naam of verkeerde pincode" if not row else "Verkeerde pincode")
+        with MISLUKT_LOCK:
+            MISLUKT.pop(sleutel, None)
+        token = nieuwe_sessie(conn, row["id"])
+    log.info("%s is ingelogd", row["naam"])
+    return jsonify(token=token, gebruiker=row["naam"], rest=sessie_seconden())
+
+
+@app.post("/api/uitloggen")
+def api_uitloggen():
+    with get_db() as conn:
+        conn.execute("DELETE FROM sessies WHERE token = ?", (request.headers.get("X-Sessie") or "",))
+    return jsonify(ok=True)
+
+
+def gebruiker_from_json(d, nieuw):
+    naam, pin = text(d.get("naam")), d.get("pin")
+    if nieuw and not naam:
+        abort(400, "Naam is verplicht")
+    if naam and len(naam) > 40:
+        abort(400, "Naam is te lang (max. 40 tekens)")
+    if pin is not None or nieuw:
+        pin = str(pin or "").strip()
+        if not (pin.isdigit() and 4 <= len(pin) <= 12):
+            abort(400, "De pincode moet uit 4 tot 12 cijfers bestaan")
+    return naam, pin
+
+
+@app.get("/api/gebruikers")
+def api_gebruikers():
+    with get_db() as conn:
+        rows = conn.execute("SELECT u.id, u.naam, u.created_at, "
+                            "(SELECT COUNT(*) FROM entries e WHERE e.ingevoerd_door = u.naam) AS logregels "
+                            "FROM gebruikers u ORDER BY u.naam COLLATE NOCASE").fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.post("/api/gebruikers")
+def api_gebruiker_create():
+    naam, pin = gebruiker_from_json(request.get_json(force=True) or {}, True)
+    with get_db() as conn:
+        eerste = not inlog_aan(conn)
+        try:
+            cur = conn.execute("INSERT INTO gebruikers (naam, pin_hash, created_at) VALUES (?,?,?)",
+                               (naam, pin_hash(pin), now()))
+        except sqlite3.IntegrityError:
+            abort(400, f"Gebruiker '{naam}' bestaat al")
+        # de eerste gebruiker zet inloggen aan: wie hem maakt, is meteen als hem ingelogd
+        token = nieuwe_sessie(conn, cur.lastrowid) if eerste else None
+    changed()
+    return jsonify(id=cur.lastrowid, token=token, gebruiker=naam if eerste else None,
+                   rest=sessie_seconden() if eerste else None), 201
+
+
+@app.put("/api/gebruikers/<int:uid>")
+def api_gebruiker_update(uid):
+    naam, pin = gebruiker_from_json(request.get_json(force=True) or {}, False)
+    with get_db() as conn:
+        oud = conn.execute("SELECT naam FROM gebruikers WHERE id = ?", (uid,)).fetchone()
+        if not oud:
+            abort(404, "Gebruiker niet gevonden")
+        if naam and naam != oud["naam"]:
+            try:
+                conn.execute("UPDATE gebruikers SET naam = ? WHERE id = ?", (naam, uid))
+            except sqlite3.IntegrityError:
+                abort(400, f"Gebruiker '{naam}' bestaat al")
+        if pin:
+            conn.execute("UPDATE gebruikers SET pin_hash = ? WHERE id = ?", (pin_hash(pin), uid))
+            # andere apparaten van deze gebruiker moeten opnieuw inloggen
+            conn.execute("DELETE FROM sessies WHERE gebruiker_id = ? AND token != ?",
+                         (uid, request.headers.get("X-Sessie") or ""))
+    changed()
+    return jsonify(ok=True)
+
+
+@app.delete("/api/gebruikers/<int:uid>")
+def api_gebruiker_delete(uid):
+    with get_db() as conn:
+        if not conn.execute("DELETE FROM gebruikers WHERE id = ?", (uid,)).rowcount:
+            abort(404, "Gebruiker niet gevonden")
+    changed()
+    return jsonify(ok=True)
 
 
 # Hoofdmenu: module -> tabbladen (id, naam, bestanden). Bij elk bestand horen templates/<bestand>.html

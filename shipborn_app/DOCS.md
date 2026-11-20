@@ -5,7 +5,7 @@ Eén paneel in de Home Assistant-zijbalk met modules voor je boot. Bovenin kies 
 - **Logboek**: logregels met foto's.
 - **Onderhoud**: terugkerende onderhoudstaken (met stappenplannen) en categorieën.
 - **Reizen**: in ontwikkeling.
-- **Instellingen**: urentellers (hoofdmotor, generator) en logo.
+- **Instellingen**: gebruikers (inloggen), urentellers (hoofdmotor, generator), agenda en logo.
 
 ## Installeren
 
@@ -32,11 +32,15 @@ Eén paneel in de Home Assistant-zijbalk met modules voor je boot. Bovenin kies 
 | `caldav_url` | Adres van de agenda (CalDAV). Voor iCloud: `https://caldav.icloud.com/` (standaard). Ook Nextcloud, Fastmail e.d. werken. |
 | `caldav_username` | Voor iCloud: je Apple ID (e-mailadres). |
 | `caldav_password` | Voor iCloud: een **app-specifiek wachtwoord** (account.apple.com › Inloggen en beveiliging › App-specifieke wachtwoorden), niet je gewone wachtwoord. |
+| `login_minutes` | Na hoeveel minuten zonder wijziging je opnieuw moet inloggen (standaard 15). Alleen van belang als er gebruikers zijn (**Instellingen › Gebruikers**). |
+| `login_reset` | Noodknop als niemand zijn pincode meer weet: zet aan en herstart de app. Alle gebruikers worden verwijderd en inloggen staat uit. **Zet de optie daarna weer uit.** Logregels blijven staan. |
 | `google_client_id`, `google_client_secret` | Voor Google Agenda: client-ID en clientgeheim van een eigen OAuth-client (type **Desktop-app**) in Google Cloud. Zie **Agenda koppelen** hieronder. |
 
 ## Gebruik
 
 Het logboek is voor **alle gebruikers** van Home Assistant beschikbaar, ook zonder beheerdersrechten. Iedereen kan alles in het logboek doen. Bij elke logregel wordt automatisch vastgelegd wie hem heeft ingevoerd (en wie hem het laatst heeft gewijzigd); dat staat bij de logregel, in de PDF, de dagmail en de CSV-export. Na de update: zet **Toon in zijbalk** uit en weer aan, of herstart Home Assistant, zodat gewone gebruikers het item in hun zijbalk zien.
+
+**Inloggen in de app.** Gebruiken meerdere mensen hetzelfde Home Assistant-account (bijvoorbeeld een tablet aan boord), voeg dan bij **Instellingen › Gebruikers** iedereen toe met een naam en een pincode (4–12 cijfers). Vanaf de eerste gebruiker opent de app met een inlogscherm: tik op je naam en vul je pincode in. Bij logregels, planning en uitvoeringen staat dan die naam in plaats van de naam van het HA-account. Je blijft ingelogd zolang je iets wijzigt; na **15 minuten zonder wijziging** (instelbaar met `login_minutes`) vraagt de app opnieuw om je pincode. Even naar een andere pagina en binnen die tijd terug: geen nieuwe inlog nodig. Verloopt de tijd terwijl je een logregel invult, dan log je opnieuw in en wordt hij daarna gewoon opgeslagen. Uitloggen: tik rechtsboven op je naam. Pincode vergeten: een andere gebruiker kan hem bij **Instellingen › Gebruikers** wijzigen (en anders: optie `login_reset`). Verwijder je alle gebruikers, dan gaat inloggen weer uit.
 
 - **Logboek**: tik op **+** voor een nieuwe logregel. Met **Foto maken** open je de camera, met **Uit galerij** kies je bestaande foto's (ook meerdere tegelijk). Foto's worden op de telefoon al verkleind, zodat het uploaden snel gaat. Met de blauwe ✎ op een foto open je de **foto-editor**: vrij tekenen, pijlen, lijnen, rechthoeken, cirkels en tekst, in zes kleuren en drie diktes, met ongedaan maken. Bij een opgeslagen foto blijft het origineel bewaard; met **Origineel herstellen** haal je alle tekeningen weer weg. Naast elke foto kun je een omschrijving typen; die staat onder de foto als je hem groot bekijkt, en in de dagmail en de CSV-export. Tik op een regel om hem te bewerken. Tik op een foto om hem groot te bekijken. Bij **Bestede tijd** vul je in hoe lang het werk duurde, bijvoorbeeld `1:30` of `1,5` (uur) of `45 min`. Elke logregel toont ook wanneer hij is opgeslagen.
 - **Onderhoud › Taken**: terugkerend onderhoud. Een taak kan een interval hebben in dagen, in uren van de hoofdmotor en/of in uren van de generator; wat het eerst bereikt is, telt. Met **Uitgevoerd** maak je een logregel aan die aan de taak gekoppeld is, en daarmee starten de tellers opnieuw. Bij elke logregel worden de standen van beide urentellers vastgelegd.

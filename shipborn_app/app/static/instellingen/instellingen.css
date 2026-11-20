@@ -20,3 +20,11 @@
 .gplak{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}
 .gplak input{flex:1 1 220px}
 
+#gebruikersLijst{margin:10px 0}
+.gbrij{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line)}
+.gbrij:first-child{border-top:0}
+.gbrij .info{flex:1 1 160px;display:flex;flex-direction:column;gap:2px}
+.gbrij .info .chip{align-self:flex-start}
+.gbrij .gbpin{flex:1 1 140px;max-width:200px}
+.gbadd{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.gbadd input{flex:1 1 160px}
