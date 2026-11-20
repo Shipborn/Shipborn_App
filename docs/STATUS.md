@@ -2,9 +2,8 @@
 
 **Versie 1.4.0**, werkmap `261106` (nieuwste, 2026-11-06). Werk gepauzeerd; een volgende sessie (ook op een andere computer) begint met `../nieuwe_sessie.ps1` en leest `../CLAUDE.md` en `CLAUDE.md`.
 
-## Stand van GitHub (`Shipborn/Shipborn_App`) — let op, loopt achter op de werkmap
-- `main` = **1.3.0** (commit `b32c41e`, plus `53c4db3` alleen STATUS). 1.3.0 en 1.4.0 zijn gemaakt in een git-checkout (`~/Projects/Shipborn_App` op de Mac) en niet in een datummap; `261106` bevat nu alles.
-- Branch `agenda-koppeling` (commits `50ea69c` en `9210879`) = de inhoud van `261106` zonder `voorbeeld/`; **PR #1** naar main staat open, nog niet samengevoegd. Na samenvoegen is `main` gelijk aan `261106`.
+## Stand van GitHub (`Shipborn/Shipborn_App`)
+- `main` = **1.4.0** (PR #1 samengevoegd op 2026-11-06, merge-commit `b77a620`) = de inhoud van `261106` zonder `voorbeeld/` (op deze regel na: in git staat nog "PR open"; gaat mee bij de volgende push). 1.3.0 en 1.4.0 zijn gemaakt in een git-checkout (`~/Projects/Shipborn_App` op de Mac) en niet in een datummap.
 - `Shipborn/ha-logboek` blijft op 0.16.0. Daar staat nog een gepushte branch `agenda-google-icloud` (eerste versie van de koppeling, per ongeluk in die repo): mag weg, wacht op akkoord van de gebruiker.
 
 ## Gedaan
@@ -29,7 +28,7 @@
 - Module Reizen is nog een lege placeholder. `voorbeeld/` alleen in de werkmap; niet publiceren.
 
 ## Volgende stappen
-1. Gebruiker: PR #1 samenvoegen en daarna in HA bijwerken naar 1.4.0.
+1. Gebruiker: in HA bijwerken naar 1.4.0 (staat op main).
 2. In HA: iCloud (Apple ID + app-specifiek wachtwoord) of Google (eigen OAuth-client) instellen, kalender kiezen en controleren: punten verschijnen, verschuiven op de telefoon komt terug, "Onderhoud: …" voor open taken.
 3. Branch `agenda-google-icloud` in `Shipborn/ha-logboek` verwijderen (na akkoord).
 4. Open vragen: stappenplan in de taak-PDF? Bestede tijd alleen tellen als de uitvoering open is? Inhoud van Reizen? Git i.p.v. datummappen (1.3.0/1.4.0 zijn al in git gemaakt)?
