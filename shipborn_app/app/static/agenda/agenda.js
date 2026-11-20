@@ -123,7 +123,7 @@ function planCard(p) {
       <div class="meta">${p.gedaan ? '<span class="ok">✓ gedaan' + (p.entry_datum ? ' op ' + fmtDate(p.entry_datum) : '') + '</span>'
         : teLaat ? `<span class="laat">gepland ${fmtDate(p.datum)}</span>` : '<span>gepland</span>'}
         ${p.tijd ? `<span>${p.tijd}${p.duur_minuten ? ' · ' + fmtDur(p.duur_minuten) : ''}</span>` : ''}
-        ${chip(p.taak_categorie)} ${chip(p.task_id && '⟳ onderhoudstaak')}</div>
+        ${catChip(p.taak_categorie)} ${chip(p.task_id && '⟳ onderhoudstaak')}</div>
       <h3>${esc(p.titel)}</h3>
       ${als(p.notitie, `<p class="desc">${esc(p.notitie)}</p>`)}
       ${t && !p.gedaan ? `<div class="due">Volgende volgens interval: ${dueText(t)}</div>` : ''}
@@ -136,7 +136,7 @@ const teDoenReden = t => t.volgende_datum ? `moest op ${fmtDate(t.volgende_datum
 
 const verwachtCard = (t, uitleg = 'verwacht volgens interval') => `<article class="card s-${t.status}" data-taak="${t.id}">
     <div class="taskrow"><div class="grow">
-      <div class="meta">${statusHtml(t)} ${chip(t.categorie)} <span>${esc(uitleg)}</span></div>
+      <div class="meta">${statusHtml(t)} ${catChip(t.categorie)} <span>${esc(uitleg)}</span></div>
       <h3>${esc(t.naam)}</h3>
       <div class="due">${laatstText(t)}</div>
     </div>

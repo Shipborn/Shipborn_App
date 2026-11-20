@@ -1,11 +1,21 @@
-/* Onderhoud › Categorieën */
-.catadd{display:flex;gap:8px;margin-bottom:12px}
+/* Onderhoud › Categorieën en systemen */
+.catadd{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.catadd input{flex:1 1 200px}
+.catadd .syskeuze{flex:0 1 200px}
 .catrow{display:flex;align-items:center;gap:8px;cursor:default;padding:8px 10px}
 .catrow .info{flex:1;min-width:0;cursor:pointer}
 .catrow .info:hover .name{text-decoration:underline}
 .catrow .name{font-weight:600;overflow-wrap:anywhere}
 .catrow .use{color:var(--muted);font-size:12px}
-.catrow input{flex:1}
+.catrow input{flex:1 1 140px}
+.catrow .syskeuze{flex:0 1 170px}
+.catrow.bewerk{flex-wrap:wrap}
+/* systeem als kop van een groep, de categorieën eronder ingesprongen */
+.sysrow{border-left:4px solid var(--accent);margin-top:16px}
+.sysrow .name{font-size:16px}
+.catrow.insys{margin-left:22px}
+.cat-los{font-size:13px;color:var(--muted);margin:18px 2px 8px;text-transform:uppercase;letter-spacing:.03em}
 .catents{margin-bottom:14px}
 .catents h3{font-size:14px;margin:0 0 6px}
 #view-cats > .hint{margin:12px 2px}
+@media (max-width:520px){.catrow.insys{margin-left:10px}}

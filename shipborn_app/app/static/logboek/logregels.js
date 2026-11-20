@@ -21,7 +21,9 @@ op('taken', taken => {
 async function loadEntries() {
   const p = new URLSearchParams();
   if ($('#q').value.trim()) p.set('q', $('#q').value.trim());
-  if ($('#fcat').value) p.set('categorie', $('#fcat').value);
+  const fc = $('#fcat').value;   // categorie, of systeem:<id> voor alle categorieën van een systeem
+  if (fc.startsWith('systeem:')) p.set('systeem', fc.slice(8));
+  else if (fc) p.set('categorie', fc);
   ENTRIES = await api('api/entries?' + p);
   renderEntries();
 }
@@ -37,7 +39,7 @@ const entryCard = e => `
   <article class="card" data-id="${e.id}">
     <div class="meta">
       <span>${fmtDate(e.datum)}</span>
-      ${chip(e.categorie)}
+      ${catChip(e.categorie)}
       ${chip(e.taak_naam && '⟳ ' + e.taak_naam)}
       ${duurHtml(e.duur_minuten)}
       ${stampHtml(e)}

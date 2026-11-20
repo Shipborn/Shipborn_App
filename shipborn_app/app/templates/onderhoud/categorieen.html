@@ -1,14 +1,19 @@
 {% from "gedeeld/macros.html" import dialoog %}
 <section id="view-cats" hidden>
+  <form class="catadd" id="sysAdd">
+    <input name="naam" placeholder="Nieuw systeem, bijv. Koelwater" maxlength="60" required>
+    <button class="btn" type="submit">Systeem toevoegen</button>
+  </form>
   <form class="catadd" id="catAdd">
     <input name="naam" placeholder="Nieuwe categorie, bijv. Dek & beslag" maxlength="60" required>
+    <select name="systeem_id" class="syskeuze" aria-label="Systeem"></select>
     <button class="btn primary" type="submit">Toevoegen</button>
   </form>
   <div id="cats"></div>
-  <p class="hint">Bij hernoemen gaan bestaande logregels en taken mee. Bij verwijderen blijven logregels en taken bewaard, maar zonder categorie.</p>
+  <p class="hint">Een systeem bundelt categorieën (bijv. Koelwater: pomp, impeller, warmtewisselaar). Met ✎ hernoem je een categorie of zet je hem in een ander systeem. Bij hernoemen gaan bestaande logregels en taken mee. Bij verwijderen blijven logregels en taken bewaard: een verwijderde categorie laat ze zonder categorie, een verwijderd systeem laat zijn categorieën zonder systeem.</p>
 </section>
 
-{# Logregels per categorie #}
+{# Logregels per categorie of per systeem #}
 {% call dialoog("catDlg", "Categorie", titel_id="catTitle") %}
 <div class="dbody blok" id="catBody"></div>
 <div class="dfoot">

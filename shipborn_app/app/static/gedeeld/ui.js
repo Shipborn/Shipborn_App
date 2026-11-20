@@ -1,6 +1,7 @@
 // Gedeelde HTML-bouwstenen, zodat de tabbladen alleen hun eigen inhoud hoeven te beschrijven.
 const als = (v, html) => v ? html : '';
 const meervoud = (n, een, meer) => `${n} ${n === 1 ? een : meer}`;
+const catChip = cat => chip(catLabel(cat));
 const chip = tekst => als(tekst, `<span class="chip">${esc(tekst)}</span>`);
 const leeg = html => `<div class="empty">${html}</div>`;
 const duurHtml = m => als(m != null, `<span title="Bestede tijd">⏱ ${fmtDur(m)}</span>`);

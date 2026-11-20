@@ -65,3 +65,8 @@
 - **Taken die aan de beurt zijn ook naar de agenda** (wens gebruiker), één richting en aan/uit te zetten: te laat of zonder datum → vandaag, anders de datum volgens het interval. Wijzigingen worden herkend aan een hash van de inhoud (er is geen wijzigingstijd). Verplaatsen op de telefoon wordt overschreven: een vaste datum geef je door in te plannen.
 - **Vaste datum in de taakdialoog** stuurt het eerstvolgende open geplande punt van de taak aan (geen extra kolom op de taak): zo blijft er één bron voor geplande datums.
 
+## 2026-11-20 – Systemen bundelen categorieën (1.5.0)
+- **Systeem als groep boven de categorie** (wens gebruiker), één niveau diep: een categorie hoort bij hoogstens één systeem (`categories.systeem_id`). Geen veel-op-veel en geen geneste systemen: eenvoudig te beheren en genoeg voor "Koelwater: pomp, impeller, …".
+- **Logregels en taken blijven aan de categorie gekoppeld** (bestaande kolom met de naam); het systeem wordt afgeleid. Daardoor verandert er niets aan bestaande data, sync, PDF, MQTT en dagmail, en verhuist een categorie met al haar logregels als je haar in een ander systeem zet.
+- **Systeem verwijderen laat de categorieën staan** (zonder systeem), net zoals een categorie verwijderen de logregels laat staan.
+- Beheer in het bestaande tabblad Categorieën (systemen als kop, categorieën eronder), niet in een apart tabblad.

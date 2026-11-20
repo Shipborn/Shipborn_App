@@ -36,14 +36,29 @@ function fillSelect(sel, items, first) {
     items.map(i => `<option value="${esc(i.value ?? i)}">${esc(i.label ?? i)}</option>`).join('');
 }
 
-// Alle keuzelijsten met data-categorieen="<eerste optie>" vullen met de categorieën (keuze blijft staan).
+// Alle keuzelijsten met data-categorieen="<eerste optie>" vullen met de categorieën, gegroepeerd per systeem
+// (keuze blijft staan). Met data-systemen komt per systeem ook een keuze "systeem:<id>" (alle categorieën ervan).
 function vulCategorieKeuzes() {
+  const systemen = CFG.systemen || [], inSys = new Set(systemen.flatMap(s => s.categorieen));
+  const opt = (v, l) => `<option value="${esc(v)}">${esc(l)}</option>`;
+  const los = CFG.categories.filter(c => !inSys.has(c));
   $$('select[data-categorieen]').forEach(sel => {
-    const keep = sel.value;
-    fillSelect(sel, CFG.categories, sel.dataset.categorieen);
-    sel.value = CFG.categories.includes(keep) ? keep : '';
+    const keep = sel.value, metSys = sel.hasAttribute('data-systemen');
+    const groepen = systemen.filter(s => s.categorieen.length || metSys);
+    sel.innerHTML = opt('', sel.dataset.categorieen) +
+      groepen.map(s => `<optgroup label="${esc(s.naam)}">${metSys ? opt('systeem:' + s.id, s.naam + ' – alles') : ''}` +
+        s.categorieen.map(c => opt(c, c)).join('') + '</optgroup>').join('') +
+      (groepen.length && los.length ? `<optgroup label="Zonder systeem">${los.map(c => opt(c, c)).join('')}</optgroup>`
+        : los.map(c => opt(c, c)).join(''));
+    sel.value = [...sel.options].some(o => o.value === keep) ? keep : '';
   });
 }
+
+// categorie met haar systeem ervoor, bijv. "Koelwater › Impeller" (zonder systeem: alleen de categorie)
+const catLabel = cat => {
+  const s = cat && (CFG.systemen || []).find(x => x.categorieen.includes(cat));
+  return s ? `${s.naam} › ${cat}` : cat;
+};
 
 // ---------------------------------------------------------------- berichten tussen tabbladen
 const LUISTERAARS = {};

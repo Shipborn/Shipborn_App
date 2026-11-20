@@ -38,7 +38,7 @@ from PIL import Image, ImageOps
 
 import kalender
 
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("shipborn")
@@ -156,6 +156,12 @@ CREATE TABLE IF NOT EXISTS categories (
     naam TEXT NOT NULL UNIQUE COLLATE NOCASE,
     volgorde INTEGER NOT NULL DEFAULT 0
 );
+-- systemen bundelen categorieën (categories.systeem_id); een categorie hoort bij hoogstens één systeem
+CREATE TABLE IF NOT EXISTS systemen (
+    id INTEGER PRIMARY KEY,
+    naam TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    volgorde INTEGER NOT NULL DEFAULT 0
+);
 -- agenda: ingeplande taken of losse punten; gedaan = afgevinkt of gekoppeld aan een logregel
 CREATE TABLE IF NOT EXISTS planning (
     id INTEGER PRIMARY KEY,
@@ -267,6 +273,7 @@ def init_db():
         for table, col, typ in (("entries", "duur_minuten", "INTEGER"),
                                 ("tasks", "entiteiten", "TEXT"),
                                 ("categories", "entiteiten", "TEXT"),
+                                ("categories", "systeem_id", "INTEGER REFERENCES systemen(id) ON DELETE SET NULL"),
                                 ("photos", "omschrijving", "TEXT"),
                                 ("photos", "origineel", "TEXT"),
                                 ("entries", "ingevoerd_door", "TEXT"),
@@ -311,6 +318,16 @@ def meta_set(conn, key, value):
 
 def category_names(conn):
     return [r["naam"] for r in conn.execute("SELECT naam FROM categories ORDER BY volgorde, id")]
+
+
+def systemen_met_categorieen(conn):
+    """[{id, naam, categorieen: [naam, ...]}] in volgorde, voor gegroepeerde keuzelijsten."""
+    out = [dict(r, categorieen=[]) for r in conn.execute("SELECT id, naam FROM systemen ORDER BY volgorde, id")]
+    per = {s["id"]: s for s in out}
+    for c in conn.execute("SELECT naam, systeem_id FROM categories WHERE systeem_id IS NOT NULL ORDER BY volgorde, id"):
+        if c["systeem_id"] in per:
+            per[c["systeem_id"]]["categorieen"].append(c["naam"])
+    return out
 
 
 def now():
@@ -871,10 +888,12 @@ def photo(name):
 def api_config():
     with get_db() as conn:
         cats = category_names(conn)
+        systemen = systemen_met_categorieen(conn)
         ents = teller_entiteiten(conn)
     return jsonify(
         title=OPT["title"],
         categories=cats,
+        systemen=systemen,
         uren=[{"id": tid, "naam": naam, "waarde": ha_number(ents[tid]), "ingesteld": bool(ents[tid])}
               for tid, naam, *_ in TELLERS],
         mqtt=bool(MQTT and MQTT.connected),
@@ -896,6 +915,10 @@ def api_entries():
     if cat:
         clauses.append("e.categorie = ?")
         args.append(cat)
+    systeem = text(request.args.get("systeem"))
+    if systeem:
+        clauses.append("e.categorie IN (SELECT naam FROM categories WHERE systeem_id = ?)")
+        args.append(int(systeem))
     task = text(request.args.get("task_id"))
     if task:
         clauses.append("e.task_id = ?")
@@ -1631,7 +1654,7 @@ def api_google_ontkoppel():
 def api_categories():
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT c.id, c.naam, c.volgorde, c.entiteiten, "
+            "SELECT c.id, c.naam, c.volgorde, c.entiteiten, c.systeem_id, "
             "(SELECT COUNT(*) FROM entries e WHERE e.categorie = c.naam) AS logregels, "
             "(SELECT COUNT(*) FROM tasks t WHERE t.categorie = c.naam) AS taken "
             "FROM categories c ORDER BY c.volgorde, c.id").fetchall()
@@ -1889,14 +1912,23 @@ def category_name_from_json():
     return naam
 
 
+def systeem_id_from_json(conn, d):
+    sid = d.get("systeem_id") or None
+    if sid is not None and not conn.execute("SELECT 1 FROM systemen WHERE id = ?", (int(sid),)).fetchone():
+        abort(400, "Systeem niet gevonden")
+    return int(sid) if sid is not None else None
+
+
 @app.post("/api/categories")
 def api_category_create():
     naam = category_name_from_json()
     with get_db() as conn:
         if conn.execute("SELECT 1 FROM categories WHERE naam = ?", (naam,)).fetchone():
             abort(400, f"Categorie '{naam}' bestaat al")
+        sid = systeem_id_from_json(conn, request.get_json(force=True) or {})
         nxt = conn.execute("SELECT COALESCE(MAX(volgorde), 0) + 1 FROM categories").fetchone()[0]
-        cid = conn.execute("INSERT INTO categories (naam, volgorde) VALUES (?, ?)", (naam, nxt)).lastrowid
+        cid = conn.execute("INSERT INTO categories (naam, volgorde, systeem_id) VALUES (?, ?, ?)",
+                           (naam, nxt, sid)).lastrowid
     changed()
     return jsonify(id=cid), 201
 
@@ -1915,6 +1947,86 @@ def api_category_rename(cid):
         # bestaande logregels en taken meenemen
         conn.execute("UPDATE entries SET categorie = ? WHERE categorie = ?", (naam, old))
         conn.execute("UPDATE tasks SET categorie = ? WHERE categorie = ?", (naam, old))
+    changed()
+    return jsonify(ok=True)
+
+
+@app.put("/api/categories/<int:cid>/systeem")
+def api_category_systeem(cid):
+    """Categorie bij een systeem zetten ({systeem_id}) of eruit halen ({systeem_id: null})."""
+    with get_db() as conn:
+        sid = systeem_id_from_json(conn, request.get_json(force=True) or {})
+        if conn.execute("UPDATE categories SET systeem_id = ? WHERE id = ?", (sid, cid)).rowcount == 0:
+            abort(404, "Categorie niet gevonden")
+    changed()
+    return jsonify(ok=True)
+
+
+# --------------------------------------------------------------------------- systemen
+
+def systeem_naam_from_json():
+    naam = text((request.get_json(force=True) or {}).get("naam"))
+    if not naam:
+        abort(400, "Naam is verplicht")
+    if len(naam) > 60:
+        abort(400, "Naam is te lang (max. 60 tekens)")
+    return naam
+
+
+@app.get("/api/systemen")
+def api_systemen():
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT s.id, s.naam, s.volgorde, "
+            "(SELECT COUNT(*) FROM categories c WHERE c.systeem_id = s.id) AS categorieen, "
+            "(SELECT COUNT(*) FROM entries e JOIN categories c ON c.naam = e.categorie WHERE c.systeem_id = s.id) "
+            "AS logregels, "
+            "(SELECT COUNT(*) FROM tasks t JOIN categories c ON c.naam = t.categorie WHERE c.systeem_id = s.id) "
+            "AS taken FROM systemen s ORDER BY s.volgorde, s.id").fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.post("/api/systemen")
+def api_systeem_create():
+    naam = systeem_naam_from_json()
+    with get_db() as conn:
+        if conn.execute("SELECT 1 FROM systemen WHERE naam = ?", (naam,)).fetchone():
+            abort(400, f"Systeem '{naam}' bestaat al")
+        nxt = conn.execute("SELECT COALESCE(MAX(volgorde), 0) + 1 FROM systemen").fetchone()[0]
+        sid = conn.execute("INSERT INTO systemen (naam, volgorde) VALUES (?, ?)", (naam, nxt)).lastrowid
+    changed()
+    return jsonify(id=sid), 201
+
+
+@app.put("/api/systemen/order")
+def api_systeem_order():
+    ids = (request.get_json(force=True) or {}).get("ids") or []
+    with get_db() as conn:
+        for i, sid in enumerate(ids, start=1):
+            conn.execute("UPDATE systemen SET volgorde = ? WHERE id = ?", (i, int(sid)))
+    changed()
+    return jsonify(ok=True)
+
+
+@app.put("/api/systemen/<int:sid>")
+def api_systeem_rename(sid):
+    naam = systeem_naam_from_json()
+    with get_db() as conn:
+        if conn.execute("SELECT 1 FROM systemen WHERE naam = ? AND id != ?", (naam, sid)).fetchone():
+            abort(400, f"Systeem '{naam}' bestaat al")
+        if conn.execute("UPDATE systemen SET naam = ? WHERE id = ?", (naam, sid)).rowcount == 0:
+            abort(404, "Systeem niet gevonden")
+    changed()
+    return jsonify(ok=True)
+
+
+@app.delete("/api/systemen/<int:sid>")
+def api_systeem_delete(sid):
+    """Systeem weg; de categorieën (en hun logregels en taken) blijven, zonder systeem."""
+    with get_db() as conn:
+        conn.execute("UPDATE categories SET systeem_id = NULL WHERE systeem_id = ?", (sid,))
+        if conn.execute("DELETE FROM systemen WHERE id = ?", (sid,)).rowcount == 0:
+            abort(404, "Systeem niet gevonden")
     changed()
     return jsonify(ok=True)
 
@@ -1946,13 +2058,15 @@ def api_category_delete(cid):
 def api_export():
     with get_db() as conn:
         rows = entries_with_photos(conn)
+        systeem_van = {r["naam"]: r["systeem"] for r in conn.execute(
+            "SELECT c.naam, s.naam AS systeem FROM categories c JOIN systemen s ON s.id = c.systeem_id")}
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
-    w.writerow(["Datum", "Categorie", "Titel", "Taak", "Omschrijving", "Motoruren", "Generator-uren",
+    w.writerow(["Datum", "Systeem", "Categorie", "Titel", "Taak", "Omschrijving", "Motoruren", "Generator-uren",
                 "Uitgevoerd door", "Bestede tijd (u:mm)", "Meetwaarden", "Opgeslagen", "Ingevoerd door", "Foto's"])
     for r in rows:
         w.writerow([
-            r["datum"], r["categorie"] or "", r["titel"], r["taak_naam"] or "", r["omschrijving"] or "",
+            r["datum"], systeem_van.get(r["categorie"], ""), r["categorie"] or "", r["titel"], r["taak_naam"] or "", r["omschrijving"] or "",
             "" if r["motoruren"] is None else str(r["motoruren"]).replace(".", ","),
             "" if r["generator_uren"] is None else str(r["generator_uren"]).replace(".", ","),
             r["uitgevoerd_door"] or "", fmt_minutes(r["duur_minuten"]), fmt_values(r["waarden"]),
@@ -2187,6 +2301,32 @@ def api_pdf_category(cid):
     if not entries:
         pdf.line_text("Nog geen logregels in deze categorie.", 10, color=MUTED)
     return pdf_response(pdf, f"categorie {c['naam']}")
+
+
+@app.get("/api/pdf/systeem/<int:sid>")
+def api_pdf_systeem(sid):
+    with get_db() as conn:
+        s = conn.execute("SELECT naam FROM systemen WHERE id = ?", (sid,)).fetchone()
+        if not s:
+            abort(404, "Systeem niet gevonden")
+        cats = [r["naam"] for r in conn.execute(
+            "SELECT naam FROM categories WHERE systeem_id = ? ORDER BY volgorde, id", (sid,))]
+        entries = entries_with_photos(
+            conn, "WHERE e.categorie IN (SELECT naam FROM categories WHERE systeem_id = ?)", (sid,))
+        taken = conn.execute("SELECT COUNT(*) FROM tasks t JOIN categories c ON c.naam = t.categorie "
+                             "WHERE c.systeem_id = ?", (sid,)).fetchone()[0]
+    pdf = LogPdf(f"systeem {s['naam']}")
+    pdf.heading(s["naam"], "Systeem" + (": " + ", ".join(cats) if cats else ""))
+    tijd = sum(e["duur_minuten"] or 0 for e in entries)
+    pdf.stats([(len(entries), "logregel" if len(entries) == 1 else "logregels"),
+               (fmt_duur(tijd) or "—", "totale tijd"),
+               (taken, "taak" if taken == 1 else "taken")])
+    pdf.separator()
+    for e in entries:
+        pdf.entry(e)
+    if not entries:
+        pdf.line_text("Nog geen logregels in dit systeem.", 10, color=MUTED)
+    return pdf_response(pdf, f"systeem {s['naam']}")
 
 
 # --------------------------------------------------------------------------- dagmail

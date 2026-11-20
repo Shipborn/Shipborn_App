@@ -61,7 +61,7 @@ const taskCard = t => `
   <article class="card s-${t.status}" data-id="${t.id}">
     <div class="taskrow">
       <div class="grow">
-        <div class="meta">${statusHtml(t)} ${chip(t.categorie)} ${chip(t.stappen.length && meervoud(t.stappen.length, 'stap', 'stappen'))} ${lopendChip(t)}
+        <div class="meta">${statusHtml(t)} ${catChip(t.categorie)} ${chip(t.stappen.length && meervoud(t.stappen.length, 'stap', 'stappen'))} ${lopendChip(t)}
           ${pdfKnop(`api/pdf/task/${t.id}`, 'PDF van deze taak met alle uitvoeringen', true)}</div>
         <h3>${esc(t.naam)}</h3>
         <div class="due">Volgende: ${dueText(t)}</div>
@@ -188,7 +188,7 @@ async function renderHistory() {
   const body = $('#histBody');
   const sinds = e => { const g = gap[e.id]; return g ? [`+${g.d} dagen`, ...g.h].join(' · ') + ' sinds vorige' : 'eerste keer gelogd'; };
   body.innerHTML = `
-    <div class="meta s-${t.status}">${statusHtml(t)} ${chip(t.categorie)} <span>Volgende: ${dueText(t)}</span>
+    <div class="meta s-${t.status}">${statusHtml(t)} ${catChip(t.categorie)} <span>Volgende: ${dueText(t)}</span>
       ${als(t.gepland_datum, `<span>📅 ingepland op ${fmtDate(t.gepland_datum)}</span>`)}</div>
     ${statsHtml(stats)}
     ${als(t.notitie, `<p class="hnote">${esc(t.notitie)}</p>`)}
