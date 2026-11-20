@@ -1,9 +1,9 @@
 # Status
 
-**Versie 1.6.1**, op GitHub (`main`, 2026-11-20). Werkmap `261106` in Dropbox is 1.4.0.
+**Versie 1.6.1**, op GitHub (`main`, 2026-11-20) en in Dropbox-werkmap `261120` (= `main` + `voorbeeld/`; `261106` is 1.4.0).
 
 ## Stand van GitHub (`Shipborn/Shipborn_App`)
-- `main` = **1.6.1** (inloggen; alleen app-gebruiker vastgelegd, 2026-11-20); 1.5.0 = systemen; 1.4.0 = PR #1, merge-commit `b77a620`, = de inhoud van `261106` zonder `voorbeeld/`. 1.3.0 en 1.4.0 zijn gemaakt in een git-checkout (`~/Projects/Shipborn_App` op de Mac) en niet in een datummap.
+- `main` = **1.6.1** (inloggen; alleen app-gebruiker vastgelegd, 2026-11-20); 1.5.0 = systemen; 1.4.0 = PR #1, merge-commit `b77a620`, = de inhoud van `261106` zonder `voorbeeld/`. 1.3.0–1.6.1 zijn gemaakt in een git-checkout (`~/Projects/Shipborn_App` op de Mac) en daarna als datummap in Dropbox gezet (op de Mac: `~/SHIPborn B.V. Dropbox/Shipborn/Shipborn_APP/01.SourceCode`).
 - `Shipborn/ha-logboek` blijft op 0.16.0. Daar staat nog een gepushte branch `agenda-google-icloud` (eerste versie van de koppeling, per ongeluk in die repo): mag weg, wacht op akkoord van de gebruiker.
 
 ## Gedaan
