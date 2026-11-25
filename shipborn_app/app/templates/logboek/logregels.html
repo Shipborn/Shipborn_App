@@ -22,6 +22,14 @@
   <label>Uitgevoerd door<input name="uitgevoerd_door" placeholder="Zelf, werf, monteur…"></label>
   <label>Bestede tijd<input name="duur" inputmode="decimal" placeholder="uur:min, bijv. 1:30"></label>
   <label class="full">Omschrijving<textarea name="omschrijving" placeholder="Wat is er gedaan, gebruikte onderdelen, bevindingen…"></textarea></label>
+  <fieldset class="full opvolging">
+    <legend>Opvolging</legend>
+    <ul class="opvlijst" id="entryOpvolg" hidden></ul>
+    <div class="opvnieuw">
+      <label>Wat moet er nog gebeuren?<input name="opvolging_titel" placeholder="Bijv. pakking bestellen, over een maand controleren"></label>
+      <label>Datum <span class="hint">(leeg = op de lijst Nog te doen)</span><input type="date" name="opvolging_datum"></label>
+    </div>
+  </fieldset>
   <div class="full" id="entryVals" hidden></div>
   <p class="full hint" id="entryStamp" hidden></p>
   <div class="full">

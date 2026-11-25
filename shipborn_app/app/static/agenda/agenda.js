@@ -1,6 +1,7 @@
 // Agenda: maandkalender met de logregels op datum, ingeplande taken/losse punten en de datum waarop een
 // taak volgens haar interval weer moet (verwacht), plus de afspraken uit de gekoppelde agenda (iCloud/Google,
-// Instellingen › Agenda). Klik op een dag toont die dag eronder.
+// Instellingen › Agenda). Klik op een dag toont die dag eronder. Bovenaan de lijst "Nog te doen": open punten
+// zonder datum (ook opvolgingen uit logregels), van daaruit in te plannen.
 let AG_MAAND = null, AG_DAG = today(), AG_ENTRIES = [], AG_PLAN = [], AG_OPEN = [], AG_TAKEN = [], agEditing = null;
 let AG_EXTERN = [], AG_KOPPELING = null;
 
@@ -37,12 +38,12 @@ async function laadAgenda() {
   [AG_ENTRIES, AG_PLAN, AG_OPEN, ext] = await Promise.all([api('api/entries?' + p), api('api/planning?' + p),
     api('api/planning?open=1'), api('api/agenda/extern?' + p)]);
   AG_EXTERN = ext.afspraken; AG_KOPPELING = ext.koppeling;
-  zetTeller('agenda', AG_OPEN.filter(x => x.datum < today()).length);
+  zetTeller('agenda', AG_OPEN.filter(x => x.datum && x.datum < today()).length);
   renderAgenda();
 }
 
 // verwacht: actieve taak met een volgende datum (interval in dagen, vandaag of later) die nog niet is ingepland
-const agIngepland = t => AG_OPEN.some(p => p.task_id === t.id);
+const agIngepland = t => AG_OPEN.some(p => p.task_id === t.id && p.datum);
 const agVerwacht = () => AG_TAKEN.filter(t => t.actief && t.volgende_datum >= today() && !agIngepland(t));
 // te doen (staat bij vandaag): niet ingepland en te laat, of zonder datum maar wel aan de beurt
 // (nog nooit gelogd, of een interval in uren dat (bijna) bereikt is)
@@ -88,6 +89,7 @@ function renderAgenda() {
     </button>`);
   }
   $('#agGrid').innerHTML = cellen.join('');
+  renderTodo();
   renderDag(dag[AG_DAG]);
   renderSync();
 }
@@ -123,12 +125,45 @@ function planCard(p) {
       <div class="meta">${p.gedaan ? '<span class="ok">✓ gedaan' + (p.entry_datum ? ' op ' + fmtDate(p.entry_datum) : '') + '</span>'
         : teLaat ? `<span class="laat">gepland ${fmtDate(p.datum)}</span>` : '<span>gepland</span>'}
         ${p.tijd ? `<span>${p.tijd}${p.duur_minuten ? ' · ' + fmtDur(p.duur_minuten) : ''}</span>` : ''}
-        ${catChip(p.taak_categorie)} ${chip(p.task_id && '⟳ onderhoudstaak')}</div>
+        ${catChip(p.taak_categorie)} ${chip(p.task_id && '⟳ onderhoudstaak')} ${bronChip(p)}</div>
       <h3>${esc(p.titel)}</h3>
       ${als(p.notitie, `<p class="desc">${esc(p.notitie)}</p>`)}
       ${t && !p.gedaan ? `<div class="due">Volgende volgens interval: ${dueText(t)}</div>` : ''}
     </div>${knop}</div>
   </article>`;
+}
+
+// opvolging van een logregel
+const bronChip = p => chip(p.bron_titel && `↪ opvolging van ${p.bron_titel}` + (p.bron_datum ? ` (${fmtDate(p.bron_datum)})` : ''));
+
+// ---------------------------------------------------------------- nog te doen (open punten zonder datum)
+function renderTodo() {
+  const lijst = AG_OPEN.filter(p => !p.datum);
+  $('#agTodoN').textContent = lijst.length || '';
+  $('#agTodoLijst').innerHTML = lijst.map(p => `
+    <article class="card agtodo-item" data-plan="${p.id}">
+      <div class="taskrow"><div class="grow">
+        ${als(p.task_id || p.bron_titel, `<div class="meta">${catChip(p.taak_categorie)} ${chip(p.task_id && '⟳ ' + (p.taak_naam || 'onderhoudstaak'))} ${bronChip(p)}</div>`)}
+        <h3>${esc(p.titel)}</h3>
+        ${als(p.notitie, `<p class="desc">${esc(p.notitie)}</p>`)}
+      </div>
+      <button type="button" class="btn primary" data-todoplan="${p.id}">Inplannen</button>
+      <button type="button" class="btn" data-afvinken="${p.id}" title="Gedaan zonder datum">✓</button></div>
+    </article>`).join('') || '<p class="hint agtodo-leeg">Niets zonder datum.</p>';
+}
+
+$('#agTodo').addEventListener('click', async ev => {
+  const k = s => ev.target.closest(`[data-${s}]`)?.dataset[s];
+  if (ev.target.closest('#agTodoNieuw')) return openPlanning(null, {datum: null});
+  if (k('todoplan')) return openPlanning(agPlan(k('todoplan')), {inplannen: true});
+  if (k('afvinken')) return planAfvinken(agPlan(k('afvinken')));
+  const card = ev.target.closest('.card');
+  if (card) openPlanning(agPlan(card.dataset.plan));
+});
+
+async function planAfvinken(p) {
+  try { await api('api/planning/' + p.id, json('PUT', {...p, afgevinkt: true})); toast('Afgevinkt'); await verversAlles(); }
+  catch (e) { toast(e.message); }
 }
 
 // waarom een taak bij "te doen" staat
@@ -155,7 +190,7 @@ const externCard = a => `<article class="card agextern">
 function renderDag(x = LEEG_DAG()) {
   const nu = today();
   // vandaag: ook wat eerder gepland was en nog open staat
-  const eerder = AG_DAG === nu ? AG_OPEN.filter(p => p.datum < nu) : [];
+  const eerder = AG_DAG === nu ? AG_OPEN.filter(p => p.datum && p.datum < nu) : [];
   const blok = (titel, html) => als(html, `<h3 class="agkopje">${titel}</h3>${html}`);
   const alles = eerder.length + x.plan.length + x.verwacht.length + x.tedoen.length + x.log.length + x.extern.length;
   $('#agDag').innerHTML = `
@@ -163,7 +198,7 @@ function renderDag(x = LEEG_DAG()) {
       <button type="button" class="btn" id="agPlanNieuw">+ Inplannen</button></div>
     ${blok('Nog open van eerder', eerder.map(planCard).join(''))}
     ${blok('Gepland', x.plan.map(planCard).join(''))}
-    ${blok('Te doen (nog niet ingepland)', x.tedoen.map(t => verwachtCard(t, teDoenReden(t))).join(''))}
+    ${blok('Onderhoud aan de beurt (nog niet ingepland)', x.tedoen.map(t => verwachtCard(t, teDoenReden(t))).join(''))}
     ${blok('Verwacht volgens interval', x.verwacht.map(t => verwachtCard(t)).join(''))}
     ${blok('Agenda' + (AG_KOPPELING?.kalender_naam ? ' (' + esc(AG_KOPPELING.kalender_naam) + ')' : ''), x.extern.map(externCard).join(''))}
     ${blok('Logboek', x.log.map(entryCard).join(''))}
@@ -177,12 +212,7 @@ $('#agDag').addEventListener('click', async ev => {
   const k = s => ev.target.closest(`[data-${s}]`)?.dataset[s];
   if (ev.target.closest('#agPlanNieuw')) return openPlanning(null, {datum: AG_DAG});
   if (k('uitvoeren')) { const p = agPlan(k('uitvoeren')); return planUitvoeren(agTaak(p.task_id), p.id); }
-  if (k('afvinken')) {
-    const p = agPlan(k('afvinken'));
-    try { await api('api/planning/' + p.id, json('PUT', {...p, afgevinkt: true})); toast('Afgevinkt'); await verversAlles(); }
-    catch (e) { toast(e.message); }
-    return;
-  }
+  if (k('afvinken')) return planAfvinken(agPlan(k('afvinken')));
   if (k('inplannen')) return openPlanning(null, {datum: AG_DAG, task_id: +k('inplannen')});
   if (k('taakuit')) return taakUitgevoerd(agTaak(+k('taakuit')));
   const img = ev.target.closest('img[data-lb]');
@@ -200,14 +230,20 @@ const planUitvoeren = (t, pid) => t.stappen.length || lopend(t) ? openUitvoeren(
   : openEntry(null, {task_id: t.id, titel: t.naam, categorie: t.categorie, planning_id: pid});
 
 // ---------------------------------------------------------------- dialoog
-// openPlanning(punt) bewerkt; openPlanning(null, {datum, task_id}) plant nieuw (ook vanuit Taken)
+// openPlanning(punt) bewerkt; openPlanning(null, {datum, task_id}) plant nieuw (ook vanuit Taken);
+// {datum: null} = nieuw punt zonder datum (Nog te doen); openPlanning(punt, {inplannen: true}) geeft een punt
+// zonder datum een datum (de gekozen dag, of vandaag)
 function openPlanning(p = null, preset = {}) {
   agEditing = p;
   const f = $('#planForm'); f.reset();
   const v = p || {datum: today(), ...preset};
-  $('#planTitle').textContent = p ? 'Planning bewerken' : 'Inplannen';
+  const zonder = preset.inplannen ? false : !v.datum;
+  const voorstel = AG_DAG >= today() ? AG_DAG : today();
+  $('#planTitle').textContent = preset.inplannen ? 'Inplannen' : p ? (zonder ? 'Nog te doen' : 'Planning bewerken')
+    : zonder ? 'Nog te doen' : 'Inplannen';
   $('#planDelete').hidden = !p;
-  f.datum.value = v.datum || today();
+  f.zonderdatum.checked = zonder;
+  f.datum.value = v.datum || voorstel;
   f.tijd.value = v.tijd || '';
   f.duur.value = durInput(v.duur_minuten);
   planDuurZichtbaar();
@@ -223,9 +259,22 @@ function openPlanning(p = null, preset = {}) {
   $('#planAfvinken').hidden = !!p?.entry_id;
   $('#planGedaan').hidden = !p?.entry_id;
   $('#planGedaan').textContent = p?.entry_id ? `Afgerond met de logregel van ${fmtDate(p.entry_datum)}.` : '';
+  $('#planBron').hidden = !p?.bron_titel;
+  $('#planBron').textContent = p?.bron_titel ? `Opvolging van de logregel "${p.bron_titel}" (${fmtDate(p.bron_datum)}).` : '';
   planTitelHint();
+  planZonderDatum();
   $('#planDlg').showModal();
+  if (preset.inplannen) f.datum.focus();
 }
+
+// zonder datum: geen datum, tijd en duur
+function planZonderDatum() {
+  const f = $('#planForm'), zonder = f.zonderdatum.checked;
+  $$('#planForm .plandatum').forEach(l => l.hidden = zonder);
+  f.datum.required = !zonder;
+  planDuurZichtbaar();
+}
+$('#planForm [name=zonderdatum]').addEventListener('change', planZonderDatum);
 
 function planTitelHint() {
   const f = $('#planForm');
@@ -235,19 +284,22 @@ function planTitelHint() {
 $('#planForm [name=task_id]').addEventListener('change', planTitelHint);
 
 // duur alleen bij een tijd (zonder tijd is het een afspraak van een hele dag)
-const planDuurZichtbaar = () => { $('#planDuur').hidden = !$('#planForm').tijd.value; };
+const planDuurZichtbaar = () => { const f = $('#planForm'); $('#planDuur').hidden = !f.tijd.value || f.zonderdatum.checked; };
 $('#planForm [name=tijd]').addEventListener('input', planDuurZichtbaar);
 
 $('#planForm').addEventListener('submit', async ev => {
   ev.preventDefault();
   const f = ev.target;
-  const body = {datum: f.datum.value, tijd: f.tijd.value, duur: f.tijd.value ? f.duur.value : '',
+  const zonder = f.zonderdatum.checked;
+  const body = {datum: zonder ? '' : f.datum.value, tijd: zonder ? '' : f.tijd.value, duur: f.tijd.value && !zonder ? f.duur.value : '',
     task_id: f.task_id.value ? +f.task_id.value : null, titel: f.titel.value, notitie: f.notitie.value, afgevinkt: f.afgevinkt.checked};
   try {
     await api(agEditing ? 'api/planning/' + agEditing.id : 'api/planning', json(agEditing ? 'PUT' : 'POST', body));
-    $('#planDlg').close(); toast('Ingepland');
-    AG_DAG = body.datum;
-    const [j, m] = body.datum.split('-').map(Number); AG_MAAND = [j, m - 1];
+    $('#planDlg').close(); toast(zonder ? 'Op de lijst Nog te doen gezet' : 'Ingepland');
+    if (!zonder) {
+      AG_DAG = body.datum;
+      const [j, m] = body.datum.split('-').map(Number); AG_MAAND = [j, m - 1];
+    }
     await verversAlles();
   } catch (e) { toast(e.message); }
 });

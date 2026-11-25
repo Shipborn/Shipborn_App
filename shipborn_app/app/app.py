@@ -39,7 +39,7 @@ from PIL import Image, ImageOps
 
 import kalender
 
-VERSION = "1.6.1"
+VERSION = "1.7.0"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("shipborn")
@@ -179,10 +179,11 @@ CREATE TABLE IF NOT EXISTS systemen (
     naam TEXT NOT NULL UNIQUE COLLATE NOCASE,
     volgorde INTEGER NOT NULL DEFAULT 0
 );
--- agenda: ingeplande taken of losse punten; gedaan = afgevinkt of gekoppeld aan een logregel
+-- agenda: ingeplande taken of losse punten; gedaan = afgevinkt of gekoppeld aan een logregel (entry_id).
+-- datum NULL = nog geen datum (lijst "Nog te doen"); bron_entry_id = opvolging van die logregel
 CREATE TABLE IF NOT EXISTS planning (
     id INTEGER PRIMARY KEY,
-    datum TEXT NOT NULL,
+    datum TEXT,
     task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
     titel TEXT NOT NULL,
     notitie TEXT,
@@ -301,7 +302,8 @@ def init_db():
                                 ("planning", "tijd", "TEXT"),
                                 ("planning", "duur_minuten", "INTEGER"),
                                 ("planning", "uid", "TEXT"),
-                                ("planning", "updated_at", "TEXT")):
+                                ("planning", "updated_at", "TEXT"),
+                                ("planning", "bron_entry_id", "INTEGER REFERENCES entries(id) ON DELETE SET NULL")):
             if col not in {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
         # planning van vóór 1.4.0: uid en wijzigingstijd voor de agendakoppeling
@@ -324,6 +326,30 @@ def init_db():
                 if n and n.lower() not in seen:
                     seen.add(n.lower())
                     conn.execute("INSERT INTO categories (naam, volgorde) VALUES (?, ?)", (n, len(seen)))
+    planning_datum_optioneel()
+
+
+def planning_datum_optioneel():
+    """Databases van vóór 1.7.0: planning.datum was NOT NULL. SQLite kan dat niet wijzigen, dus de tabel opnieuw
+    opbouwen (zelfde kolommen en volgorde, ook de later toegevoegde) zonder NOT NULL op datum."""
+    conn = sqlite3.connect(DB_PATH, timeout=15, isolation_level=None)   # foreign_keys staat hier uit
+    try:
+        kol = {r[1]: r[3] for r in conn.execute("PRAGMA table_info(planning)")}
+        if not kol.get("datum"):
+            return
+        sql = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'planning'").fetchone()[0]
+        nieuw = re.sub(r"\bdatum\s+TEXT\s+NOT\s+NULL", "datum TEXT", sql, count=1, flags=re.I)
+        nieuw = re.sub(r"^CREATE TABLE\s+(IF NOT EXISTS\s+)?\"?planning\"?", "CREATE TABLE planning_nieuw", nieuw, flags=re.I)
+        conn.execute("BEGIN")
+        conn.execute(nieuw)
+        conn.execute("INSERT INTO planning_nieuw SELECT * FROM planning")
+        conn.execute("DROP TABLE planning")
+        conn.execute("ALTER TABLE planning_nieuw RENAME TO planning")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_planning_datum ON planning(datum)")
+        conn.execute("COMMIT")
+        log.info("Planning omgezet: punten zonder datum (Nog te doen) zijn nu mogelijk")
+    finally:
+        conn.close()
 
 
 def meta_get(conn, key, default=None):
@@ -741,7 +767,16 @@ def entries_with_photos(conn, where="", args=()):
         for v in conn.execute(q, ids):
             values.setdefault(v["entry_id"], []).append(
                 {"entity_id": v["entity_id"], "naam": v["naam"], "waarde": v["waarde"], "eenheid": v["eenheid"]})
-    return [dict(r, fotos=photos.get(r["id"], []), waarden=values.get(r["id"], [])) for r in rows]
+    opvolg = {}
+    if ids:
+        q = (f"SELECT id, bron_entry_id, titel, datum, tijd, afgevinkt, entry_id FROM planning "
+             f"WHERE bron_entry_id IN ({','.join('?' * len(ids))}) ORDER BY id")
+        for p in conn.execute(q, ids):
+            opvolg.setdefault(p["bron_entry_id"], []).append(
+                {"id": p["id"], "titel": p["titel"], "datum": p["datum"], "tijd": p["tijd"],
+                 "gedaan": bool(p["afgevinkt"] or p["entry_id"])})
+    return [dict(r, fotos=photos.get(r["id"], []), waarden=values.get(r["id"], []), opvolgingen=opvolg.get(r["id"], []))
+            for r in rows]
 
 
 def task_status(conn, t, hours_now, today):
@@ -753,7 +788,7 @@ def task_status(conn, t, hours_now, today):
         "SELECT datum FROM entries WHERE task_id = ? ORDER BY datum DESC, id DESC LIMIT 1", (t["id"],)).fetchone()
     s.update(laatst_datum=last["datum"] if last else None, volgende_datum=None, dagen_rest=None, tellers=[])
     plan = conn.execute("SELECT id, datum, tijd FROM planning WHERE task_id = ? AND NOT afgevinkt AND entry_id IS NULL "
-                        "ORDER BY datum, id LIMIT 1", (t["id"],)).fetchone()
+                        "AND datum IS NOT NULL ORDER BY datum, id LIMIT 1", (t["id"],)).fetchone()
     s["gepland_datum"] = plan["datum"] if plan else None
     s["gepland_tijd"] = plan["tijd"] if plan else None
     s["gepland_id"] = plan["id"] if plan else None
@@ -1162,6 +1197,7 @@ def api_entry_create():
     images = load_images(request.files.getlist("fotos"), request.form.getlist("foto_omschrijving"))
     with get_db() as conn:
         eid = nieuwe_logregel(conn, data, text(request.form.get("planning_id")))
+        opvolging_maken(conn, request.form, eid)
         save_images(conn, eid, images)
         result = entries_with_photos(conn, "WHERE e.id = ?", (eid,))[0]
     changed()
@@ -1191,6 +1227,7 @@ def api_entry_update(eid):
             if m:
                 conn.execute("UPDATE photos SET omschrijving = ? WHERE id = ? AND entry_id = ?",
                              (text(value), int(m.group(1)), eid))
+        opvolging_maken(conn, request.form, eid)
         save_images(conn, eid, images)
         result = entries_with_photos(conn, "WHERE e.id = ?", (eid,))[0]
     changed()
@@ -1345,7 +1382,7 @@ def plan_afronden(conn, entry_id, task_id, planning_id=None):
                      (entry_id, now_fijn(), int(planning_id)))
     elif task_id:
         conn.execute("UPDATE planning SET entry_id = ?, updated_at = ? WHERE id = (SELECT id FROM planning "
-                     "WHERE task_id = ? AND NOT afgevinkt AND entry_id IS NULL ORDER BY datum, id LIMIT 1)",
+                     "WHERE task_id = ? AND NOT afgevinkt AND entry_id IS NULL ORDER BY datum IS NULL, datum, id LIMIT 1)",
                      (entry_id, now_fijn(), task_id))
 
 
@@ -1361,13 +1398,16 @@ def taak_inplannen(conn, tid, naam, d):
         if not m:
             abort(400, f"Ongeldige tijd: {tijd} (gebruik bijv. 09:30)")
         tijd = f"{int(m.group(1)):02d}:{m.group(2)}"
+    # het eerstvolgende punt met een datum; zonder datum (Nog te doen) alleen als er geen is en er een datum komt
     open_ = conn.execute("SELECT * FROM planning WHERE task_id = ? AND NOT afgevinkt AND entry_id IS NULL "
-                         "ORDER BY datum, id LIMIT 1", (tid,)).fetchone()
+                         "AND datum IS NOT NULL ORDER BY datum, id LIMIT 1", (tid,)).fetchone()
     if not datum:
         if open_:
             conn.execute("DELETE FROM planning WHERE id = ?", (open_["id"],))
         return
     datum = iso_date(datum)
+    open_ = open_ or conn.execute("SELECT * FROM planning WHERE task_id = ? AND NOT afgevinkt AND entry_id IS NULL "
+                                  "ORDER BY id LIMIT 1", (tid,)).fetchone()
     if open_:
         if (open_["datum"], open_["tijd"]) != (datum, tijd):
             conn.execute("UPDATE planning SET datum = ?, tijd = ?, duur_minuten = ?, updated_at = ? WHERE id = ?",
@@ -1376,6 +1416,25 @@ def taak_inplannen(conn, tid, naam, d):
         conn.execute("INSERT INTO planning (datum, tijd, task_id, titel, afgevinkt, created_at, ingevoerd_door, uid, "
                      "updated_at) VALUES (?,?,?,?,0,?,?,?,?)", (datum, tijd, tid, naam, now(), current_user(),
                                                                 "shipborn-plan-" + uuid.uuid4().hex, now_fijn()))
+
+
+def nieuw_planningspunt(conn, d, bron_entry_id=None):
+    cur = conn.execute("INSERT INTO planning (datum, tijd, duur_minuten, task_id, titel, notitie, afgevinkt, "
+                       "created_at, ingevoerd_door, uid, updated_at, bron_entry_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                       (d["datum"], d["tijd"], d["duur_minuten"], d["task_id"], d["titel"], d["notitie"],
+                        d["afgevinkt"], now(), current_user(), "shipborn-plan-" + uuid.uuid4().hex, now_fijn(),
+                        bron_entry_id))
+    return cur.lastrowid
+
+
+def opvolging_maken(conn, form, entry_id):
+    """Logregel met opvolging: velden opvolging_titel (+ opvolging_datum, leeg = Nog te doen; opvolging_tijd)."""
+    titel = text(form.get("opvolging_titel"))
+    if not titel:
+        return
+    d = planning_from_json(conn, {"titel": titel, "datum": form.get("opvolging_datum"),
+                                  "tijd": form.get("opvolging_tijd"), "notitie": form.get("opvolging_notitie")})
+    nieuw_planningspunt(conn, d, entry_id)
 
 
 def planning_json(row):
@@ -1404,14 +1463,16 @@ def planning_from_json(conn, d):
         duur = minutes("" if d["duur"] is None else str(d["duur"]))
     else:
         duur = int(d["duur_minuten"]) if d.get("duur_minuten") not in (None, "") else None
-    return {"datum": iso_date(text(d.get("datum"))), "task_id": int(task_id) if task_id else None, "titel": titel,
+    datum = text(d.get("datum"))
+    return {"datum": iso_date(datum) if datum else None, "task_id": int(task_id) if task_id else None, "titel": titel,
             "notitie": text((d.get("notitie") or "").replace("\r\n", "\n")), "afgevinkt": 1 if d.get("afgevinkt") else 0,
-            "tijd": tijd, "duur_minuten": duur if tijd else None}
+            "tijd": tijd if datum else None, "duur_minuten": duur if tijd and datum else None}
 
 
 PLAN_SELECT = ("SELECT p.*, t.naam AS taak_naam, t.categorie AS taak_categorie, t.actief AS taak_actief, "
-               "e.datum AS entry_datum FROM planning p LEFT JOIN tasks t ON t.id = p.task_id "
-               "LEFT JOIN entries e ON e.id = p.entry_id")
+               "e.datum AS entry_datum, b.titel AS bron_titel, b.datum AS bron_datum FROM planning p "
+               "LEFT JOIN tasks t ON t.id = p.task_id LEFT JOIN entries e ON e.id = p.entry_id "
+               "LEFT JOIN entries b ON b.id = p.bron_entry_id")
 
 
 @app.get("/api/planning")
@@ -1424,9 +1485,11 @@ def api_planning():
             args.append(iso_date(d))
     if request.args.get("open"):
         clauses.append("NOT p.afgevinkt AND p.entry_id IS NULL")
+    if request.args.get("zonder_datum"):
+        clauses.append("p.datum IS NULL")
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     with get_db() as conn:
-        rows = conn.execute(f"{PLAN_SELECT} {where} ORDER BY p.datum, p.id", args).fetchall()
+        rows = conn.execute(f"{PLAN_SELECT} {where} ORDER BY p.datum IS NULL, p.datum, p.id", args).fetchall()
     return jsonify([planning_json(r) for r in rows])
 
 
@@ -1434,11 +1497,7 @@ def api_planning():
 def api_planning_create():
     with get_db() as conn:
         d = planning_from_json(conn, request.get_json(force=True) or {})
-        cur = conn.execute("INSERT INTO planning (datum, tijd, duur_minuten, task_id, titel, notitie, afgevinkt, "
-                           "created_at, ingevoerd_door, uid, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                           (d["datum"], d["tijd"], d["duur_minuten"], d["task_id"], d["titel"], d["notitie"],
-                            d["afgevinkt"], now(), current_user(), "shipborn-plan-" + uuid.uuid4().hex, now_fijn()))
-        pid = cur.lastrowid
+        pid = nieuw_planningspunt(conn, d)
     changed()
     return jsonify(id=pid), 201
 
@@ -1614,7 +1673,7 @@ def _agenda_sync(dav, kal, logregels, taken=True):
             agid = uuid.uuid4().hex[:8]
             meta_set(conn, "agenda_id", agid)
         syncs = {(r["soort"], r["lokaal_id"]): dict(r) for r in conn.execute("SELECT * FROM agenda_sync")}
-        plans = {r["id"]: planning_json(r) for r in conn.execute(PLAN_SELECT)}
+        plans = {r["id"]: planning_json(r) for r in conn.execute(PLAN_SELECT + " WHERE p.datum IS NOT NULL")}
         logs = {}
         if logregels:
             ids = [lid for (s, lid) in syncs if s == "log"]

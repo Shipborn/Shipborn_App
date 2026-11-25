@@ -48,6 +48,7 @@ const entryCard = e => `
     <h3>${esc(e.titel)}</h3>
     ${als(e.omschrijving, `<p class="desc">${esc(e.omschrijving)}</p>`)}
     ${valsHtml(e.waarden)}
+    ${opvolgHtml(e)}
     ${thumbsHtml(e.fotos, `data-lb="${e.id}"`)}
   </article>`;
 
@@ -103,11 +104,33 @@ function openEntry(entry = null, preset = {}) {
     (entry.updated_at && entry.updated_at !== entry.created_at ? ` · laatst gewijzigd ${fmtStamp(entry.updated_at)}` +
       (entry.gewijzigd_door ? ` door ${entry.gewijzigd_door}` : '') : '');
   f.omschrijving.value = v.omschrijving || '';
+  renderOpvolgingen(entry?.opvolgingen || []);
   renderPhotos();
   $('#entryVals').hidden = true;
   entryValuesPreview();
   $('#entryDlg').showModal();
 }
+
+// opvolgingen (planningspunten) die al bij deze logregel horen; een nieuwe komt uit de velden opvolging_titel/_datum
+const opvStatus = o => o.gedaan ? '✓ gedaan' : o.datum ? fmtDate(o.datum) + (o.tijd ? ' ' + o.tijd : '') : 'nog te doen';
+const opvolgHtml = e => als(e.opvolgingen?.length, `<div class="opvkaart">${e.opvolgingen.map(o =>
+  `<span class="${o.gedaan ? 'ok' : ''}">↪ ${esc(o.titel)} · ${opvStatus(o)}</span>`).join('')}</div>`);
+
+function renderOpvolgingen(lijst) {
+  const ul = $('#entryOpvolg');
+  ul.hidden = !lijst.length;
+  ul.innerHTML = lijst.map(o => `<li class="${o.gedaan ? 'gedaan' : ''}"><a href="#" data-opv="${o.id}">${esc(o.titel)}</a>
+    <span class="hint">${opvStatus(o)}</span></li>`).join('');
+}
+
+$('#entryOpvolg').addEventListener('click', async ev => {
+  const a = ev.target.closest('[data-opv]'); if (!a) return;
+  ev.preventDefault();
+  try {
+    const p = (await api('api/planning')).find(x => x.id == a.dataset.opv);
+    if (p && typeof openPlanning === 'function') openPlanning(p);
+  } catch (e) { toast(e.message); }
+});
 
 $('#entryForm [name=task_id]').addEventListener('change', ev => {
   const t = ALLE_TAKEN.find(t => t.id == ev.target.value);
@@ -130,7 +153,9 @@ $('#entryForm').addEventListener('submit', async ev => {
     await api(editing ? 'api/entries/' + editing.id : 'api/entries', {method: editing ? 'PUT' : 'POST', body: fd});
     pending.forEach(p => URL.revokeObjectURL(p.url)); pending = [];
     $('#entryDlg').close();
-    toast('Opgeslagen');
+    const opv = f.opvolging_titel.value.trim();
+    toast(opv ? (f.opvolging_datum.value ? `Opgeslagen; opvolging ingepland op ${fmtDate(f.opvolging_datum.value)}`
+      : 'Opgeslagen; opvolging staat op de lijst Nog te doen') : 'Opgeslagen');
     await verversAlles();
   } catch (e) { toast(e.message); }
   finally { btn.disabled = false; btn.textContent = 'Opslaan'; }

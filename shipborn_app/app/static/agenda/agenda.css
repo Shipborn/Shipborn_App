@@ -43,3 +43,12 @@
 .agsync .bad{color:var(--bad)}
 .agsync a{color:var(--accent)}
 
+/* nog te doen: punten zonder datum */
+.agtodo{margin-bottom:14px;border:1px solid var(--line);border-radius:14px;padding:10px 12px;background:color-mix(in srgb,var(--warn) 6%,var(--bg))}
+.agtodo summary{cursor:pointer;font-weight:700;font-size:15px;list-style-position:outside}
+.agtodo-n{display:inline-block;min-width:20px;padding:0 6px;border-radius:99px;background:var(--warn);color:#fff;font-size:12px;text-align:center}
+.agtodo-n:empty{display:none}
+.agtodo > .hint{margin:6px 0 10px}
+.agtodo-item{border-left:4px solid var(--warn)}
+.agtodo-item .taskrow{flex-wrap:wrap}
+.agtodo-leeg{margin:0 0 10px}

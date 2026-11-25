@@ -78,3 +78,9 @@
 - **Alleen wijzigingen worden op de server afgedwongen**; lezen (GET) niet, want PDF-, CSV- en fotolinks kunnen geen header meesturen en de app is al alleen via HA (ingress) bereikbaar. Het inlogscherm dekt de pagina wel af.
 - **Verlopen tijdens invullen verliest niets**: `api()` toont bij 401 het inlogscherm en stuurt daarna hetzelfde verzoek opnieuw.
 - (1.6.1) **Alleen de app-gebruiker telt** (wens gebruiker): `current_user()` valt niet meer terug op de HA-gebruiker uit de ingress-headers. Zonder gebruikers blijft "ingevoerd door" leeg. "Uitgevoerd door" is standaard de ingelogde gebruiker.
+
+## 2026-11-25 – Nog te doen en opvolging (1.7.0)
+- **Punt zonder datum = planning met `datum` NULL** (wens gebruiker: punten maken zonder datum en die later inplannen), geen aparte tabel: inplannen is dan alleen een datum invullen, en afvinken, taakkoppeling en de logregel-koppeling werken zoals bij geplande punten. Kostte een omzetting van de tabel (SQLite kan NOT NULL niet weghalen).
+- **Opvolging = planningspunt met `bron_entry_id`**, met of zonder datum (wens gebruiker). Een logregel kan meerdere opvolgingen hebben; verwijderen van de logregel laat de opvolging staan (het werk moet nog steeds gebeuren).
+- **Zonder datum niet naar iCloud/Google** (een afspraak heeft een datum nodig); de lijst staat alleen in de app.
+- De oude lijst "Te doen" bij vandaag (taken die aan de beurt zijn) heet nu **Onderhoud aan de beurt**, om verwarring met **Nog te doen** te voorkomen.
