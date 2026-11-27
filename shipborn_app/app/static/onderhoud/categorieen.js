@@ -307,6 +307,8 @@ async function renderCatDetail(c, p) {
   CATDOCS = docs; CATONDS = onds;
   const taken = TASKS.filter(t => t.categorie === c.naam), tijd = tijdTotaal(list);
   const el = $('#catPagina');
+  // specificaties die nog bewerkt worden niet kwijtraken als de pagina opnieuw getekend wordt
+  const concept = SPEC_BEWERK && $('#specTekst') ? {id: c.id, tekst: $('#specTekst').value} : null;
   el.innerHTML = `
     ${paginaKop(s ? {naam: s.naam, pad: ['onderhoud', 'cats', 'sys', s.id]} : {naam: 'Categorieën', pad: ['onderhoud', 'cats']}, c.naam,
       s ? `Categorie in systeem <b>${esc(s.naam)}</b>` : 'Categorie', `api/pdf/category/${c.id}`,
@@ -318,12 +320,15 @@ async function renderCatDetail(c, p) {
       [docs.length, docs.length === 1 ? 'document' : 'documenten'],
       [onds.length, onds.length === 1 ? 'onderdeel' : 'onderdelen'],
     ])}
+    ${paginaSec('spec', 'Specificaties', null, '<div id="catSpec"></div>')}
     ${paginaSec('docs', "Documenten (foto's en PDF's)", docs.length, '<div class="docs" id="catDocs"></div>')}
     ${paginaSec('ond', 'Onderdelen', onds.length, '<div id="catOnd"></div>')}
     ${paginaSec('taken', 'Taken', taken.length, taken.length ? taken.map(taakRij).join('') : leeg('Nog geen taken in deze categorie.'))}
     ${paginaSec('ents', 'Meetwaarden uit Home Assistant', (c.entiteiten || []).length,
       '<p class="hint">Bij elke nieuwe logregel in deze categorie automatisch opgeslagen.</p><div class="entpick" id="catEnts"></div>')}
     ${paginaSec('log', 'Logregels', list.length, '<div class="pTl"></div>')}`;
+  SPEC_BEWERK = concept?.id === c.id; renderSpec(c);
+  if (SPEC_BEWERK) $('#specTekst').value = concept.tekst;
   renderDocs(); renderOnd();
   const tl = $('.pTl', el);
   tl.innerHTML = list.length ? tijdlijnHtml(tl, list, e => e.taak_naam ? esc(`⟳ ${e.taak_naam}`) : '')
@@ -334,6 +339,27 @@ async function renderCatDetail(c, p) {
       c.entiteiten = r.entiteiten; toast('Meetwaarden opgeslagen');
     } catch (e) { toast(e.message); }
   });
+}
+
+// ---- specificaties: vrije tekst met eenvoudige opmaak (mdHtml); ✎ wisselt naar een tekstvak
+let SPEC_BEWERK = false;
+function renderSpec(c) {
+  const el = $('#catSpec'); if (!el) return;
+  el.innerHTML = SPEC_BEWERK ? `
+    <textarea id="specTekst" rows="10" placeholder="bijv.&#10;**Motor:** Volvo Penta D2-40&#10;- Olie: 15W-40, 6 liter&#10;- Koelvloeistof: 10 liter">${esc(c.specificaties || '')}</textarea>
+    <p class="hint">Opmaak: **vet**, *cursief*, regels met "- " of "1. " worden een lijst, een lege regel begint een nieuwe alinea.</p>
+    <div class="specknop"><button type="button" class="btn" data-act="specannuleer">Annuleren</button>
+      <button type="button" class="btn primary" data-act="specopslaan">Opslaan</button></div>`
+    : (c.specificaties ? `<div class="spec md">${mdHtml(c.specificaties)}</div>` : leeg('Nog geen specificaties. Zet hier bijvoorbeeld type, serienummer, maten, inhoud of bouwjaar.')) +
+      `<button type="button" class="btn" data-act="specbewerk">✎ ${c.specificaties ? 'Bewerken' : 'Specificaties toevoegen'}</button>`;
+  if (SPEC_BEWERK) $('#specTekst').focus();
+}
+
+async function specOpslaan(c) {
+  try {
+    const r = await api(`api/categories/${c.id}/specificaties`, json('PUT', {specificaties: $('#specTekst').value}));
+    c.specificaties = r.specificaties; SPEC_BEWERK = false; renderSpec(c); toast('Specificaties opgeslagen');
+  } catch (e) { toast(e.message); }
 }
 
 const taakRij = t => `<div class="card taakrij s-${t.status}" data-taak="${t.id}">
@@ -471,6 +497,9 @@ $('#catPagina').addEventListener('click', async ev => {
   const ond = CATONDS.find(o => o.id === +b.closest('[data-ond]')?.dataset.ond);
   const c = CATS.find(x => x.id === catPagina?.id);
   if (b.dataset.act === 'logregel' && c) openEntry(null, {categorie: c.naam});
+  if (b.dataset.act === 'specbewerk' && c) { SPEC_BEWERK = true; renderSpec(c); }
+  if (b.dataset.act === 'specannuleer' && c) { SPEC_BEWERK = false; renderSpec(c); }
+  if (b.dataset.act === 'specopslaan' && c) specOpslaan(c);
   if (b.dataset.act === 'ondnieuw') openOnderdeel();
   if (b.dataset.act === 'ondopen') openOnderdeel(ond);
   if (b.dataset.act === 'ondup' || b.dataset.act === 'onddown') ondVerplaats(ond.id, b.dataset.act === 'ondup' ? -1 : 1);

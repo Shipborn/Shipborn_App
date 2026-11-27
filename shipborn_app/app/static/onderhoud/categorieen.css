@@ -80,3 +80,10 @@
   .docs .addrow .addph{flex:1;height:88px}
   #catPagina .stats{grid-template-columns:repeat(3,1fr)}
 }
+
+/* specificaties */
+.spec{margin-bottom:10px;overflow-wrap:anywhere}
+.spec p{margin:0 0 8px}
+.spec ul,.spec ol{margin:0 0 8px;padding-left:22px}
+#specTekst{font:inherit;resize:vertical}
+.specknop{display:flex;gap:8px;justify-content:flex-end}

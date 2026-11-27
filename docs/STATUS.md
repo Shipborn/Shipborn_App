@@ -1,9 +1,9 @@
 # Status
 
-**Versie 1.9.0**, op GitHub (`main`, 2026-11-27) en in Dropbox-werkmap `261127` (= `main` + `voorbeeld/`).
+**Versie 1.10.0**, op GitHub (`main`, 2026-11-27) en in Dropbox-werkmap `261127` (= `main` + `voorbeeld/`).
 
 ## Stand van GitHub (`Shipborn/Shipborn_App`)
-- `main` = **1.9.0** (groepen en tabblad Indeling, 2026-11-27); 1.8.0 = pagina per categorie en systeem; 1.7.0 = Nog te doen en opvolging; 1.6.x = inloggen; 1.5.0 = systemen; 1.4.0 = PR #1, merge-commit `b77a620`, = de inhoud van `261106` zonder `voorbeeld/`. 1.3.0–1.6.1 zijn gemaakt in een git-checkout (`~/Projects/Shipborn_App` op de Mac) en daarna als datummap in Dropbox gezet (op de Mac: `~/SHIPborn B.V. Dropbox/Shipborn/Shipborn_APP/01.SourceCode`).
+- `main` = **1.10.0** (specificaties per categorie, 2026-11-27); 1.9.0 = groepen en tabblad Indeling; 1.8.0 = pagina per categorie en systeem; 1.7.0 = Nog te doen en opvolging; 1.6.x = inloggen; 1.5.0 = systemen; 1.4.0 = PR #1, merge-commit `b77a620`, = de inhoud van `261106` zonder `voorbeeld/`. 1.3.0–1.6.1 zijn gemaakt in een git-checkout (`~/Projects/Shipborn_App` op de Mac) en daarna als datummap in Dropbox gezet (op de Mac: `~/SHIPborn B.V. Dropbox/Shipborn/Shipborn_APP/01.SourceCode`).
 - `Shipborn/ha-logboek` blijft op 0.16.0. Daar staat nog een gepushte branch `agenda-google-icloud` (eerste versie van de koppeling, per ongeluk in die repo): mag weg, wacht op akkoord van de gebruiker.
 
 ## Gedaan
@@ -22,6 +22,7 @@
 - 1.7.0: **Nog te doen** (agenda-punten zonder datum, lijst bovenaan de Agenda, van daaruit inplannen) en **opvolging** in logregels (met datum in de agenda, zonder datum op Nog te doen). Lokaal getest: omzetting van een 1.6.1-database (tabel opnieuw opgebouwd, data blijft, twee keer starten gaat goed), punt zonder datum maken, inplannen vanuit de lijst, datum weghalen, opvolging met en zonder datum (POST en PUT), opvolgingen in dialoog en op de kaart, logregel verwijderen laat opvolging staan, sync met Radicale (zonder datum niet verstuurd, datum eraf = afspraak weg, weer ingepland = afspraak terug), telefoonbreedte.
 - 1.8.0: **Pagina per categorie** (documenten: foto's en PDF's; lijst met onderdelen; taken, meetwaarden, logregels; PDF met onderdelen en documenten) en **pagina per systeem** (kaarten van zijn categorieën, logregels). Lokaal getest: upload van foto + PDF tegelijk, ongeldig bestand geweigerd, openen/downloaden PDF, onderdelen toevoegen/volgorde, omschrijving, nieuwe logregel vanaf de pagina, taak/logregel/foto openen, terugknop en browser-terug, directe link na herladen, categorie verwijderen ruimt bestanden op, categorie-PDF, telefoonbreedte.
 - 1.9.0: **Groepen** Casco, Techniek, Interieur, Exterieur boven de systemen, met tabblad Onderhoud › Indeling (groep → systemen → systeempagina). Lokaal getest: omzetting van een 1.8.0-database (kolom `groep` erbij), onbekende groep geweigerd, systeem nieuw in groep, verplaatsen, uit groep halen, groep kiezen bij ✎ en bij toevoegen in Categorieën, terug van systeempagina naar groep, Zonder groep, telefoonbreedte.
+- 1.10.0: **Specificaties** per categorie (tekstblok bovenaan de categoriepagina, met opmaak; ook in de categorie-PDF). Lokaal getest: omzetting van een 1.9.0-database, toevoegen/bewerken/leegmaken, opmaak, concept blijft bij opnieuw tekenen, PDF, onbekende categorie.
 
 ## Niet gedaan / niet getest
 - 1.4.0 **niet getest met echte iCloud/Google, niet in HA en niet in de Docker-build** (nieuwe pakketten `icalendar`, `recurring-ical-events`). Bij Google aangenomen (alleen nep-server): `events/import` zet een eerder verwijderde afspraak terug; PATCH met `null` voor date/dateTime wisselt tussen hele dag en tijd.

@@ -39,7 +39,7 @@ from PIL import Image, ImageOps
 
 import kalender
 
-VERSION = "1.9.0"
+VERSION = "1.10.0"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("shipborn")
@@ -322,6 +322,7 @@ def init_db():
                                 ("categories", "entiteiten", "TEXT"),
                                 ("categories", "systeem_id", "INTEGER REFERENCES systemen(id) ON DELETE SET NULL"),
                                 ("systemen", "groep", "TEXT"),
+                                ("categories", "specificaties", "TEXT"),
                                 ("photos", "omschrijving", "TEXT"),
                                 ("photos", "origineel", "TEXT"),
                                 ("entries", "ingevoerd_door", "TEXT"),
@@ -1954,7 +1955,7 @@ def api_google_ontkoppel():
 def api_categories():
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT c.id, c.naam, c.volgorde, c.entiteiten, c.systeem_id, "
+            "SELECT c.id, c.naam, c.volgorde, c.entiteiten, c.systeem_id, c.specificaties, "
             "(SELECT COUNT(*) FROM entries e WHERE e.categorie = c.naam) AS logregels, "
             "(SELECT COUNT(*) FROM tasks t WHERE t.categorie = c.naam) AS taken, "
             "(SELECT COUNT(*) FROM cat_documenten d WHERE d.categorie_id = c.id) AS documenten, "
@@ -2146,6 +2147,19 @@ def api_onderdelen_volgorde(cid):
         out = onderdelen_van(conn, cid)
     changed()
     return jsonify(out)
+
+
+@app.put("/api/categories/<int:cid>/specificaties")
+def api_category_specificaties(cid):
+    """Vrije tekst met de specificaties van een categorie (eenvoudige opmaak zoals in stappenplannen)."""
+    tekst = text((request.get_json(force=True) or {}).get("specificaties"))
+    if tekst and len(tekst) > 20000:
+        abort(400, "Tekst is te lang (max. 20.000 tekens)")
+    with get_db() as conn:
+        if conn.execute("UPDATE categories SET specificaties = ? WHERE id = ?", (tekst, cid)).rowcount == 0:
+            abort(404, "Categorie niet gevonden")
+    changed()
+    return jsonify(specificaties=tekst)
 
 
 @app.put("/api/categories/<int:cid>/entiteiten")
@@ -2793,7 +2807,7 @@ def api_pdf_task(tid):
 @app.get("/api/pdf/category/<int:cid>")
 def api_pdf_category(cid):
     with get_db() as conn:
-        c = conn.execute("SELECT naam FROM categories WHERE id = ?", (cid,)).fetchone()
+        c = conn.execute("SELECT naam, specificaties FROM categories WHERE id = ?", (cid,)).fetchone()
         if not c:
             abort(404, "Categorie niet gevonden")
         entries = entries_with_photos(conn, "WHERE e.categorie = ?", (c["naam"],))
@@ -2807,6 +2821,13 @@ def api_pdf_category(cid):
                (fmt_duur(tijd) or "—", "totale tijd"),
                (taken, "taak" if taken == 1 else "taken")])
     pdf.separator()
+    if c["specificaties"]:
+        pdf.line_text("Specificaties", 13, bold=True, h=6.5)
+        pdf.ln(1)
+        # opmaaktekens (**vet**, *cursief*) weglaten; lijstjes blijven leesbaar als tekst
+        pdf.line_text(re.sub(r"\*\*(.+?)\*\*|\*(.+?)\*", lambda m: m.group(1) or m.group(2), c["specificaties"]), 10)
+        pdf.ln(2)
+        pdf.separator()
     if onderdelen:
         pdf.line_text("Onderdelen", 13, bold=True, h=6.5)
         pdf.ln(1)

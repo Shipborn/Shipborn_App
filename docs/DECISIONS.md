@@ -96,3 +96,6 @@
 - Een systeem hoort bij hoogstens één groep (net als categorie → systeem); zonder groep kan, zodat bestaande systemen gewoon blijven werken.
 - **Eigen tabblad Indeling** in Onderhoud, tussen Taken en Categorieën: Taken blijft het eerste tabblad van Onderhoud. Indeling is de bladerweg (groep → systeem → categorie), Categorieën het beheer.
 
+## 2026-11-27 – Specificaties per categorie (1.10.0)
+- **Eén vrij tekstveld** met de eenvoudige opmaak van de stappenplannen (wens gebruiker: "een stukje tekst"), geen vaste velden: wat er van belang is verschilt per categorie (motor, accu, zeilen). Bovenaan de categoriepagina, want het is de eerste informatie die je zoekt.
+
