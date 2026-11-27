@@ -39,7 +39,7 @@ from PIL import Image, ImageOps
 
 import kalender
 
-VERSION = "1.7.0"
+VERSION = "1.8.0"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("shipborn")
@@ -98,13 +98,14 @@ os.makedirs(DATA_DIR, exist_ok=True)
 # Bestanden staan in SHARE_DIR; in de database staan paden relatief daaraan:
 #   fotos/<jjjj>/<mm>/<id>.jpg (+ _t.jpg)   foto's van logregels, per maand van uploaden
 #   stappenplannen/<id>.jpg (+ _t.jpg)       uitlegafbeeldingen in stappenplannen
+#   documenten/<id>.jpg (+ _t.jpg) / .pdf    foto's en PDF's op de pagina van een categorie
 #   backup/shipborn.db                       kopie van de database na elke wijziging
 #   logo.png
 DB_PATH = os.path.join(DATA_DIR, "shipborn.db")
 BACKUP_DIR = os.path.join(SHARE_DIR, "backup")
 BACKUP_PATH = os.path.join(BACKUP_DIR, "shipborn.db")
 LOGO_PATH = os.path.join(SHARE_DIR, "logo.png")
-for d in ("fotos", "stappenplannen"):
+for d in ("fotos", "stappenplannen", "documenten"):
     os.makedirs(os.path.join(SHARE_DIR, d), exist_ok=True)
 BACKUP_LOCK = threading.Lock()
 MQTT = None  # wordt gezet in main()
@@ -179,6 +180,34 @@ CREATE TABLE IF NOT EXISTS systemen (
     naam TEXT NOT NULL UNIQUE COLLATE NOCASE,
     volgorde INTEGER NOT NULL DEFAULT 0
 );
+-- pagina van een categorie: documenten (soort foto: JPEG + thumb; soort pdf) en een lijst met onderdelen
+CREATE TABLE IF NOT EXISTS cat_documenten (
+    id INTEGER PRIMARY KEY,
+    categorie_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+    soort TEXT NOT NULL,
+    bestand TEXT NOT NULL,
+    thumb TEXT,
+    naam TEXT,
+    omschrijving TEXT,
+    grootte INTEGER,
+    created_at TEXT,
+    ingevoerd_door TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_cat_documenten ON cat_documenten(categorie_id);
+CREATE TABLE IF NOT EXISTS onderdelen (
+    id INTEGER PRIMARY KEY,
+    categorie_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+    naam TEXT NOT NULL,
+    merk TEXT,
+    artikelnummer TEXT,
+    aantal TEXT,
+    leverancier TEXT,
+    opmerking TEXT,
+    volgorde INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT,
+    gewijzigd_door TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_onderdelen ON onderdelen(categorie_id);
 -- agenda: ingeplande taken of losse punten; gedaan = afgevinkt of gekoppeld aan een logregel (entry_id).
 -- datum NULL = nog geen datum (lijst "Nog te doen"); bron_entry_id = opvolging van die logregel
 CREATE TABLE IF NOT EXISTS planning (
@@ -1114,7 +1143,7 @@ def api_logo_delete():
     return jsonify(logo=None)
 
 
-MEDIA_RE = re.compile(r"^(fotos/\d{4}/\d{2}|stappenplannen)/[0-9a-f]{32}(_t)?\.jpg$")
+MEDIA_RE = re.compile(r"^(fotos/\d{4}/\d{2}|stappenplannen|documenten)/[0-9a-f]{32}(_t)?\.jpg$")
 
 
 @app.get("/photos/<path:name>")
@@ -1920,9 +1949,196 @@ def api_categories():
         rows = conn.execute(
             "SELECT c.id, c.naam, c.volgorde, c.entiteiten, c.systeem_id, "
             "(SELECT COUNT(*) FROM entries e WHERE e.categorie = c.naam) AS logregels, "
-            "(SELECT COUNT(*) FROM tasks t WHERE t.categorie = c.naam) AS taken "
+            "(SELECT COUNT(*) FROM tasks t WHERE t.categorie = c.naam) AS taken, "
+            "(SELECT COUNT(*) FROM cat_documenten d WHERE d.categorie_id = c.id) AS documenten, "
+            "(SELECT COUNT(*) FROM onderdelen o WHERE o.categorie_id = c.id) AS onderdelen, "
+            "(SELECT MAX(e.datum) FROM entries e WHERE e.categorie = c.naam) AS laatste "
             "FROM categories c ORDER BY c.volgorde, c.id").fetchall()
-    return jsonify([dict(r, entiteiten=entity_list(r["entiteiten"])) for r in rows])
+        thumbs = {}
+        for d in conn.execute("SELECT categorie_id, thumb FROM cat_documenten WHERE soort = 'foto' ORDER BY id DESC"):
+            lijst = thumbs.setdefault(d["categorie_id"], [])
+            if len(lijst) < 4:
+                lijst.append(d["thumb"])
+    return jsonify([dict(r, entiteiten=entity_list(r["entiteiten"]), thumbs=thumbs.get(r["id"], [])) for r in rows])
+
+
+# --------------------------------------------------------------------------- pagina van een categorie
+# Documenten: foto's (in de browser verkleind, hier JPEG + miniatuur) en PDF's, in SHARE_DIR/documenten.
+# Onderdelen: vrije lijst (naam, merk/type, artikelnummer, aantal, leverancier, opmerking).
+
+def categorie_of_404(conn, cid):
+    c = conn.execute("SELECT id, naam FROM categories WHERE id = ?", (cid,)).fetchone()
+    if not c:
+        abort(404, "Categorie niet gevonden")
+    return c
+
+
+def document_json(r):
+    return {k: r[k] for k in ("id", "categorie_id", "soort", "bestand", "thumb", "naam", "omschrijving", "grootte",
+                              "created_at", "ingevoerd_door")}
+
+
+@app.get("/api/categories/<int:cid>/documenten")
+def api_cat_documenten(cid):
+    with get_db() as conn:
+        categorie_of_404(conn, cid)
+        rows = conn.execute("SELECT * FROM cat_documenten WHERE categorie_id = ? ORDER BY id DESC", (cid,)).fetchall()
+    return jsonify([document_json(r) for r in rows])
+
+
+@app.post("/api/categories/<int:cid>/documenten")
+def api_cat_documenten_upload(cid):
+    """Eén of meer bestanden (veld "bestand"): PDF of foto. Alles wordt eerst gelezen en gecontroleerd."""
+    nieuw = []
+    for fs in request.files.getlist("bestand"):
+        if not fs or not fs.filename:
+            continue
+        data = fs.read()
+        naam = os.path.basename(fs.filename.replace("\\", "/"))[:120] or "bestand"
+        if data[:5] == b"%PDF-":
+            nieuw.append(("pdf", data, naam))
+            continue
+        try:
+            img = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
+        except Exception:  # noqa: BLE001
+            abort(400, f"Kan '{naam}' niet lezen; gebruik een PDF of een foto (JPEG/PNG)")
+        nieuw.append(("foto", img, naam))
+    if not nieuw:
+        abort(400, "Geen bestand ontvangen")
+    omschrijving = text(request.form.get("omschrijving"))
+    with get_db() as conn:
+        categorie_of_404(conn, cid)
+        for soort, inhoud, naam in nieuw:
+            if soort == "pdf":
+                bestand, thumb = f"{foto_map('documenten')}/{uuid.uuid4().hex}.pdf", None
+                with open(os.path.join(SHARE_DIR, bestand), "wb") as f:
+                    f.write(inhoud)
+                grootte = len(inhoud)
+            else:
+                bestand, thumb = write_photo(inhoud, "documenten")
+                grootte = os.path.getsize(os.path.join(SHARE_DIR, bestand))
+            conn.execute("INSERT INTO cat_documenten (categorie_id, soort, bestand, thumb, naam, omschrijving, grootte, "
+                         "created_at, ingevoerd_door) VALUES (?,?,?,?,?,?,?,?,?)",
+                         (cid, soort, bestand, thumb, naam, omschrijving, grootte, now(), current_user()))
+        rows = conn.execute("SELECT * FROM cat_documenten WHERE categorie_id = ? ORDER BY id DESC", (cid,)).fetchall()
+    changed()
+    return jsonify([document_json(r) for r in rows]), 201
+
+
+@app.put("/api/documenten/<int:did>")
+def api_document_wijzig(did):
+    d = request.get_json(force=True) or {}
+    with get_db() as conn:
+        r = conn.execute("SELECT * FROM cat_documenten WHERE id = ?", (did,)).fetchone()
+        if not r:
+            abort(404, "Document niet gevonden")
+        naam = text(d.get("naam")) if "naam" in d else r["naam"]
+        oms = text(d.get("omschrijving")) if "omschrijving" in d else r["omschrijving"]
+        conn.execute("UPDATE cat_documenten SET naam = ?, omschrijving = ? WHERE id = ?", (naam or r["naam"], oms, did))
+        r = conn.execute("SELECT * FROM cat_documenten WHERE id = ?", (did,)).fetchone()
+    changed()
+    return jsonify(document_json(r))
+
+
+@app.delete("/api/documenten/<int:did>")
+def api_document_verwijder(did):
+    with get_db() as conn:
+        r = conn.execute("SELECT bestand, thumb FROM cat_documenten WHERE id = ?", (did,)).fetchone()
+        if not r:
+            abort(404, "Document niet gevonden")
+        conn.execute("DELETE FROM cat_documenten WHERE id = ?", (did,))
+    remove_files(r["bestand"], r["thumb"])
+    changed()
+    return jsonify(ok=True)
+
+
+@app.get("/bestand/<int:did>")
+def document_bestand(did):
+    """Document openen (PDF in de browser) of met ?download=1 opslaan onder zijn eigen naam."""
+    with get_db() as conn:
+        r = conn.execute("SELECT bestand, naam, soort FROM cat_documenten WHERE id = ?", (did,)).fetchone()
+    if not r:
+        abort(404, "Document niet gevonden")
+    naam = r["naam"] or os.path.basename(r["bestand"])
+    if r["soort"] == "foto" and not naam.lower().endswith((".jpg", ".jpeg")):
+        naam = os.path.splitext(naam)[0] + ".jpg"   # foto's zijn omgezet naar JPEG
+    return send_from_directory(SHARE_DIR, r["bestand"], download_name=naam, max_age=3600,
+                               as_attachment=bool(request.args.get("download")))
+
+
+ONDERDEEL_VELDEN = ("naam", "merk", "artikelnummer", "aantal", "leverancier", "opmerking")
+
+
+def onderdeel_from_json(d):
+    o = {k: text(d.get(k)) for k in ONDERDEEL_VELDEN}
+    if not o["naam"]:
+        abort(400, "Geef het onderdeel een naam")
+    return o
+
+
+def onderdelen_van(conn, cid):
+    return [dict(r) for r in conn.execute(
+        "SELECT id, categorie_id, naam, merk, artikelnummer, aantal, leverancier, opmerking, volgorde, created_at, "
+        "gewijzigd_door FROM onderdelen WHERE categorie_id = ? ORDER BY volgorde, id", (cid,))]
+
+
+@app.get("/api/categories/<int:cid>/onderdelen")
+def api_cat_onderdelen(cid):
+    with get_db() as conn:
+        categorie_of_404(conn, cid)
+        return jsonify(onderdelen_van(conn, cid))
+
+
+@app.post("/api/categories/<int:cid>/onderdelen")
+def api_cat_onderdeel_nieuw(cid):
+    o = onderdeel_from_json(request.get_json(force=True) or {})
+    with get_db() as conn:
+        categorie_of_404(conn, cid)
+        nxt = conn.execute("SELECT COALESCE(MAX(volgorde), 0) + 1 FROM onderdelen WHERE categorie_id = ?",
+                           (cid,)).fetchone()[0]
+        conn.execute(f"INSERT INTO onderdelen (categorie_id, {', '.join(ONDERDEEL_VELDEN)}, volgorde, created_at, "
+                     f"gewijzigd_door) VALUES (?, {', '.join('?' * len(ONDERDEEL_VELDEN))}, ?, ?, ?)",
+                     (cid, *o.values(), nxt, now(), current_user()))
+        out = onderdelen_van(conn, cid)
+    changed()
+    return jsonify(out), 201
+
+
+@app.put("/api/onderdelen/<int:oid>")
+def api_onderdeel_wijzig(oid):
+    o = onderdeel_from_json(request.get_json(force=True) or {})
+    with get_db() as conn:
+        r = conn.execute("SELECT categorie_id FROM onderdelen WHERE id = ?", (oid,)).fetchone()
+        if not r:
+            abort(404, "Onderdeel niet gevonden")
+        conn.execute(f"UPDATE onderdelen SET {', '.join(k + ' = ?' for k in ONDERDEEL_VELDEN)}, gewijzigd_door = ? "
+                     "WHERE id = ?", (*o.values(), current_user(), oid))
+        out = onderdelen_van(conn, r["categorie_id"])
+    changed()
+    return jsonify(out)
+
+
+@app.delete("/api/onderdelen/<int:oid>")
+def api_onderdeel_verwijder(oid):
+    with get_db() as conn:
+        r = conn.execute("SELECT categorie_id FROM onderdelen WHERE id = ?", (oid,)).fetchone()
+        if not r:
+            abort(404, "Onderdeel niet gevonden")
+        conn.execute("DELETE FROM onderdelen WHERE id = ?", (oid,))
+        out = onderdelen_van(conn, r["categorie_id"])
+    changed()
+    return jsonify(out)
+
+
+@app.put("/api/categories/<int:cid>/onderdelen/order")
+def api_onderdelen_volgorde(cid):
+    ids = (request.get_json(force=True) or {}).get("ids") or []
+    with get_db() as conn:
+        for i, oid in enumerate(ids, start=1):
+            conn.execute("UPDATE onderdelen SET volgorde = ? WHERE id = ? AND categorie_id = ?", (i, int(oid), cid))
+        out = onderdelen_van(conn, cid)
+    changed()
+    return jsonify(out)
 
 
 @app.put("/api/categories/<int:cid>/entiteiten")
@@ -2311,9 +2527,14 @@ def api_category_delete(cid):
         row = conn.execute("SELECT naam FROM categories WHERE id = ?", (cid,)).fetchone()
         if not row:
             abort(404, "Categorie niet gevonden")
+        docs = conn.execute("SELECT bestand, thumb FROM cat_documenten WHERE categorie_id = ?", (cid,)).fetchall()
+        conn.execute("DELETE FROM cat_documenten WHERE categorie_id = ?", (cid,))
+        conn.execute("DELETE FROM onderdelen WHERE categorie_id = ?", (cid,))
         conn.execute("DELETE FROM categories WHERE id = ?", (cid,))
         conn.execute("UPDATE entries SET categorie = NULL WHERE categorie = ?", (row["naam"],))
         conn.execute("UPDATE tasks SET categorie = NULL WHERE categorie = ?", (row["naam"],))
+    for d in docs:
+        remove_files(d["bestand"], d["thumb"])
     changed()
     return jsonify(ok=True)
 
@@ -2553,6 +2774,8 @@ def api_pdf_category(cid):
             abort(404, "Categorie niet gevonden")
         entries = entries_with_photos(conn, "WHERE e.categorie = ?", (c["naam"],))
         taken = conn.execute("SELECT COUNT(*) FROM tasks WHERE categorie = ?", (c["naam"],)).fetchone()[0]
+        onderdelen = onderdelen_van(conn, cid)
+        docs = [dict(r) for r in conn.execute("SELECT * FROM cat_documenten WHERE categorie_id = ? ORDER BY id", (cid,))]
     pdf = LogPdf(f"categorie {c['naam']}")
     pdf.heading(c["naam"], "Categorie")
     tijd = sum(e["duur_minuten"] or 0 for e in entries)
@@ -2560,6 +2783,30 @@ def api_pdf_category(cid):
                (fmt_duur(tijd) or "—", "totale tijd"),
                (taken, "taak" if taken == 1 else "taken")])
     pdf.separator()
+    if onderdelen:
+        pdf.line_text("Onderdelen", 13, bold=True, h=6.5)
+        pdf.ln(1)
+        for o in onderdelen:
+            details = " · ".join(x for x in (o["merk"], o["artikelnummer"] and "art.nr. " + o["artikelnummer"],
+                                             o["leverancier"]) if x)
+            pdf.line_text((f"{o['aantal']} × " if o["aantal"] else "") + o["naam"], 10, bold=True)
+            if details:
+                pdf.line_text(details, 9, color=MUTED)
+            if o["opmerking"]:
+                pdf.line_text(o["opmerking"], 9)
+            pdf.ln(1.5)
+        pdf.separator()
+    if docs:
+        pdf.line_text("Documenten", 13, bold=True, h=6.5)
+        pdfs = [d for d in docs if d["soort"] == "pdf"]
+        for d in pdfs:
+            pdf.line_text("PDF: " + (d["naam"] or "") + (f" – {d['omschrijving']}" if d["omschrijving"] else ""), 9)
+        fotos = [dict(d, omschrijving=d["omschrijving"] or d["naam"]) for d in docs if d["soort"] == "foto"]
+        if fotos:
+            pdf.ln(2)
+            w, rows = pdf.photo_rows(fotos, False)
+            pdf.photos(w, rows)
+        pdf.separator()
     for e in entries:   # nieuwste eerst, zoals in de app
         pdf.entry(e)
     if not entries:

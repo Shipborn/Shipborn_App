@@ -84,3 +84,10 @@
 - **Opvolging = planningspunt met `bron_entry_id`**, met of zonder datum (wens gebruiker). Een logregel kan meerdere opvolgingen hebben; verwijderen van de logregel laat de opvolging staan (het werk moet nog steeds gebeuren).
 - **Zonder datum niet naar iCloud/Google** (een afspraak heeft een datum nodig); de lijst staat alleen in de app.
 - De oude lijst "Te doen" bij vandaag (taken die aan de beurt zijn) heet nu **Onderhoud aan de beurt**, om verwarring met **Nog te doen** te voorkomen.
+
+## 2026-11-27 – Pagina per categorie en systeem (1.8.0)
+- **Pagina in het tabblad Categorieën, geen dialoog of nieuw tabblad** (wens gebruiker: "een pagina" per categorie en per systeem): de oude logregeldialoog is opgegaan in de categoriepagina. Adres in de hash (`#onderhoud/cats/cat/<id>`), zodat herladen en de terugknop van telefoon/browser werken; daarvoor kreeg `show()` een extra pad en `ga()` (pushState).
+- **Documenten per categorie in een eigen tabel**, los van de foto's van logregels: ze horen bij het onderdeel, niet bij een uitgevoerde klus. Foto's en PDF's in één lijst (veel documentatie is PDF). PDF's ongewijzigd opgeslagen (herkend aan de `%PDF-`-kop, niet aan de extensie); geen voorbeeldafbeelding van PDF's (geen extra pakket in de container).
+- **Onderdelen als vrije velden** (aantal is tekst: "2", "1 set"), geen voorraadbeheer of koppeling met taken; uit te breiden als dat nodig blijkt.
+- Categorie verwijderen verwijdert haar documenten en onderdelen (logregels en taken blijven, zoals voorheen).
+

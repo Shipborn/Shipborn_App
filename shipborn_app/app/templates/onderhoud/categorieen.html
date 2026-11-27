@@ -1,22 +1,35 @@
-{% from "gedeeld/macros.html" import dialoog %}
+{% from "gedeeld/macros.html" import dialoog, voet %}
 <section id="view-cats" hidden>
-  <form class="catadd" id="sysAdd">
-    <input name="naam" placeholder="Nieuw systeem, bijv. Koelwater" maxlength="60" required>
-    <button class="btn" type="submit">Systeem toevoegen</button>
-  </form>
-  <form class="catadd" id="catAdd">
-    <input name="naam" placeholder="Nieuwe categorie, bijv. Dek & beslag" maxlength="60" required>
-    <select name="systeem_id" class="syskeuze" aria-label="Systeem"></select>
-    <button class="btn primary" type="submit">Toevoegen</button>
-  </form>
-  <div id="cats"></div>
-  <p class="hint">Een systeem bundelt categorieën (bijv. Koelwater: pomp, impeller, warmtewisselaar). Met ✎ hernoem je een categorie of zet je hem in een ander systeem. Bij hernoemen gaan bestaande logregels en taken mee. Bij verwijderen blijven logregels en taken bewaard: een verwijderde categorie laat ze zonder categorie, een verwijderd systeem laat zijn categorieën zonder systeem.</p>
+  {# overzicht: systemen met hun categorieën #}
+  <div id="catsLijst">
+    <form class="catadd" id="sysAdd">
+      <input name="naam" placeholder="Nieuw systeem, bijv. Koelwater" maxlength="60" required>
+      <button class="btn" type="submit">Systeem toevoegen</button>
+    </form>
+    <form class="catadd" id="catAdd">
+      <input name="naam" placeholder="Nieuwe categorie, bijv. Dek & beslag" maxlength="60" required>
+      <select name="systeem_id" class="syskeuze" aria-label="Systeem"></select>
+      <button class="btn primary" type="submit">Toevoegen</button>
+    </form>
+    <div id="cats"></div>
+    <p class="hint">Een systeem bundelt categorieën (bijv. Koelwater: pomp, impeller, warmtewisselaar). Tik op een systeem of categorie om de pagina te openen: bij een systeem zie je al zijn categorieën, bij een categorie de documenten (foto's en PDF's), onderdelen, taken en logregels. Met ✎ hernoem je een categorie of zet je hem in een ander systeem. Bij hernoemen gaan bestaande logregels en taken mee. Bij verwijderen blijven logregels en taken bewaard: een verwijderde categorie laat ze zonder categorie (haar documenten en onderdelen worden wel verwijderd), een verwijderd systeem laat zijn categorieën zonder systeem.</p>
+  </div>
+  {# pagina van één systeem of categorie (#onderhoud/cats/sys/<id> of …/cat/<id>) #}
+  <div id="catPagina" hidden></div>
+  <!-- niet "hidden": sommige Android-webviews openen dan geen kiezer; geopend via <label for> -->
+  <input type="file" id="docCam" class="vh" accept="image/*" capture="environment" tabindex="-1">
+  <input type="file" id="docFile" class="vh" accept="image/*,application/pdf,.pdf" multiple tabindex="-1">
 </section>
 
-{# Logregels per categorie of per systeem #}
-{% call dialoog("catDlg", "Categorie", titel_id="catTitle") %}
-<div class="dbody blok" id="catBody"></div>
-<div class="dfoot">
-  <button type="button" class="btn primary" id="catNew">Nieuwe logregel</button>
+{# Onderdeel van een categorie toevoegen of wijzigen #}
+{% call dialoog("ondDlg", "Onderdeel", titel_id="ondTitle", form_id="ondForm") %}
+<div class="dbody">
+  <label class="full">Naam<input name="naam" maxlength="120" required placeholder="bijv. Impeller"></label>
+  <label>Merk / type<input name="merk" maxlength="120"></label>
+  <label>Artikelnummer<input name="artikelnummer" maxlength="80"></label>
+  <label>Aantal<input name="aantal" maxlength="30" placeholder="bijv. 2 of 1 set"></label>
+  <label>Leverancier<input name="leverancier" maxlength="120"></label>
+  <label class="full">Opmerking<textarea name="opmerking" rows="3" placeholder="bijv. maat, reserve aan boord, link naar webshop"></textarea></label>
 </div>
+{{ voet(verwijder_id="ondDelete") }}
 {% endcall %}

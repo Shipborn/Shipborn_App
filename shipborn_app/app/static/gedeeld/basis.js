@@ -81,7 +81,7 @@ const meld = (naam, ...args) => (LUISTERAARS[naam] || []).forEach(fn => fn(...ar
 // ---------------------------------------------------------------- tabbladen
 // tabblad(id, {nieuw, toon, config, laden, ververs, naVerversen}):
 //   nieuw()       – actie van de +-knop (zonder: geen +-knop)
-//   toon()        – bij openen van het tabblad
+//   toon(pad)     – bij openen van het tabblad; pad = rest van de hash (zie show), meestal []
 //   config(CFG)   – na het laden van de instellingen
 //   laden()       – bij het opstarten
 //   ververs()     – na een wijziging ergens in de app; naVerversen() daarna (als alle lijsten bijgewerkt zijn)
@@ -111,8 +111,16 @@ function zetTeller(tab, n) {
 // ---------------------------------------------------------------- navigatie
 // Elke module heeft een <nav class="tabs" data-mod> met haar tabbladen (bij één tabblad met data-enkel, niet getoond).
 const tabsVan = mod => $$(`nav.tabs[data-mod="${mod}"] .tab`).map(b => b.dataset.tab);
+// show(mod, tab, ...pad): pad gaat naar toon(pad) van het tabblad, bijv. #onderhoud/cats/cat/3 → toon(['cat', '3']).
+// ga(...) doet hetzelfde als nieuwe stap in de geschiedenis, zodat de terugknop van browser/telefoon terug gaat.
 const LAATSTE = {};
-function show(mod, tab) {
+function ga(mod, tab, ...pad) {
+  const hash = '#' + [mod, tab, ...pad].join('/');
+  if (location.hash !== hash) history.pushState(null, '', hash);
+  show(mod, tab, ...pad);
+}
+window.addEventListener('popstate', () => show(...location.hash.slice(1).split('/')));
+function show(mod, tab, ...pad) {
   const eigen = $(`.tab[data-tab="${tab}"]`)?.closest('nav').dataset.mod;   // oude links, bijv. #logboek/tasks
   if (eigen) mod = eigen;
   if (!$(`.mod[data-mod="${mod}"]`)) mod = $('.mod').dataset.mod;
@@ -124,8 +132,9 @@ function show(mod, tab) {
   $$('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
   $$('main > section').forEach(s => s.hidden = s.id !== 'view-' + tab);
   $('#fab').hidden = !TABBLADEN[tab]?.nieuw;
-  TABBLADEN[tab]?.toon?.();
-  history.replaceState(null, '', '#' + mod + (tabs.length > 1 ? '/' + tab : ''));
+  pad = pad.filter(Boolean);
+  TABBLADEN[tab]?.toon?.(pad);
+  history.replaceState(null, '', '#' + mod + (tabs.length > 1 || pad.length ? '/' + tab : '') + pad.map(p => '/' + p).join(''));
 }
 
 // ---------------------------------------------------------------- opstarten

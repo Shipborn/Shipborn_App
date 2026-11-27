@@ -19,3 +19,64 @@
 .catents h3{font-size:14px;margin:0 0 6px}
 #view-cats > .hint{margin:12px 2px}
 @media (max-width:520px){.catrow.insys{margin-left:10px}}
+
+/* pagina van een systeem of categorie */
+.pkop{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.pkop .terug{flex:0 0 auto}
+.ptitel{flex:1 1 200px;min-width:0}
+.ptitel h2{margin:0;font-size:20px;overflow-wrap:anywhere}
+.psub{font-size:12px;color:var(--muted)}
+.pknop{display:flex;gap:8px;flex-wrap:wrap}
+.pkop2{font-size:15px;margin:16px 2px 8px}
+#catPagina .stats{margin-bottom:12px}
+#catPagina .catadd{margin-top:4px}
+.psec{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:10px;box-shadow:var(--shadow)}
+.psec > summary{padding:11px 14px;font-weight:600;cursor:pointer;list-style-position:inside}
+.psec > summary .n{font-size:12px;color:var(--muted);background:var(--chip);border-radius:99px;padding:1px 8px;margin-left:4px;font-weight:600}
+.psecbody{padding:0 14px 14px}
+.psecbody > .empty{padding:14px 10px}
+.psecbody > .hint{margin:0 0 8px}
+/* systeem: kaarten van de categorieën */
+.catgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:10px}
+.catgrid .card{margin:0}
+.catkaart h3{margin:0 0 4px}
+.catkaart .use{color:var(--muted);font-size:12px}
+.kaartstatus{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.chip.bad{color:var(--bad)} .chip.warn{color:var(--warn)}
+.kaartfotos{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:8px}
+.kaartfotos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px}
+/* documenten */
+.docs{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}
+.doc{margin:0;width:150px;display:flex;flex-direction:column;gap:4px}
+.doc img,.pdftegel{width:150px;height:120px;border-radius:8px;border:1px solid var(--line)}
+.doc img{object-fit:cover;cursor:zoom-in}
+.pdftegel{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px;text-decoration:none;color:var(--fg);background:var(--chip);text-align:center}
+.pdftegel span{font-size:30px;line-height:1}
+.pdftegel b{font-size:12px;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pdftegel small{font-size:11px;color:var(--muted)}
+.doc figcaption{font-size:12px;overflow-wrap:anywhere;display:flex;flex-direction:column}
+.doc figcaption .use{color:var(--muted);font-size:11px}
+.docknop{display:flex;gap:4px}
+.docknop a.ib{text-decoration:none;color:inherit;display:inline-flex;align-items:center;justify-content:center}
+.docs .addrow .addph{width:120px;height:120px}
+/* onderdelen */
+.ondlijst{display:flex;flex-direction:column;margin-bottom:10px}
+.ond{display:flex;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid var(--line)}
+.ond:last-child{border-bottom:0}
+.ondinfo{flex:1;min-width:0;cursor:pointer}
+.ondinfo:hover .ondnaam{text-decoration:underline}
+.ondnaam{font-weight:600;overflow-wrap:anywhere}
+.ondnaam .aantal{color:var(--accent)}
+.ond .use{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.ondopm{font-size:13px;white-space:pre-line;margin-top:2px}
+/* taken */
+.taakrij{display:flex;align-items:center;gap:4px 12px;flex-wrap:wrap;padding:8px 12px}
+.taakrij .tnaam{font-weight:600;flex:1 1 160px}
+.taakrij .use{color:var(--muted);font-size:12px;flex-basis:100%}
+@media (max-width:520px){
+  .doc{width:calc(50% - 5px)}
+  .doc img,.pdftegel{width:100%}
+  .docs .addrow{width:100%}
+  .docs .addrow .addph{flex:1;height:88px}
+  #catPagina .stats{grid-template-columns:repeat(3,1fr)}
+}
