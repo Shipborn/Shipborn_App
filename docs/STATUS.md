@@ -1,9 +1,9 @@
 # Status
 
-**Versie 1.8.0**, op GitHub (`main`, 2026-11-27) en in Dropbox-werkmap `261127` (= `main` + `voorbeeld/`).
+**Versie 1.9.0**, op GitHub (`main`, 2026-11-27) en in Dropbox-werkmap `261127` (= `main` + `voorbeeld/`).
 
 ## Stand van GitHub (`Shipborn/Shipborn_App`)
-- `main` = **1.8.0** (pagina per categorie en systeem, 2026-11-27); 1.7.0 = Nog te doen en opvolging; 1.6.x = inloggen; 1.5.0 = systemen; 1.4.0 = PR #1, merge-commit `b77a620`, = de inhoud van `261106` zonder `voorbeeld/`. 1.3.0–1.6.1 zijn gemaakt in een git-checkout (`~/Projects/Shipborn_App` op de Mac) en daarna als datummap in Dropbox gezet (op de Mac: `~/SHIPborn B.V. Dropbox/Shipborn/Shipborn_APP/01.SourceCode`).
+- `main` = **1.9.0** (groepen en tabblad Indeling, 2026-11-27); 1.8.0 = pagina per categorie en systeem; 1.7.0 = Nog te doen en opvolging; 1.6.x = inloggen; 1.5.0 = systemen; 1.4.0 = PR #1, merge-commit `b77a620`, = de inhoud van `261106` zonder `voorbeeld/`. 1.3.0–1.6.1 zijn gemaakt in een git-checkout (`~/Projects/Shipborn_App` op de Mac) en daarna als datummap in Dropbox gezet (op de Mac: `~/SHIPborn B.V. Dropbox/Shipborn/Shipborn_APP/01.SourceCode`).
 - `Shipborn/ha-logboek` blijft op 0.16.0. Daar staat nog een gepushte branch `agenda-google-icloud` (eerste versie van de koppeling, per ongeluk in die repo): mag weg, wacht op akkoord van de gebruiker.
 
 ## Gedaan
@@ -21,6 +21,7 @@
 - 1.6.0: **Inloggen** met naam + pincode (Instellingen › Gebruikers); aan zodra er een gebruiker is. Wie iets invoert/wijzigt wordt de ingelogde gebruiker. Na 15 min (optie `login_minutes`) zonder wijziging opnieuw inloggen; verlopen tijdens invullen → inloggen en daarna toch opgeslagen. Noodknop `login_reset`. 1.6.1: alleen de app-gebruiker wordt vastgelegd (niet meer de HA-gebruiker), "Uitgevoerd door" standaard de ingelogde gebruiker, ook bij afronden van een stappenplan. Lokaal getest (met `login_minutes: 1`): eerste gebruiker meteen ingelogd, herladen blijft ingelogd, verlopen → inlogscherm, verkeerde pincode, blokkade na 5 fouten, opslaan na opnieuw inloggen (logregel "door Piet"), pincode wijzigen, laatste gebruiker weg → inloggen uit, `login_reset`, telefoonbreedte.
 - 1.7.0: **Nog te doen** (agenda-punten zonder datum, lijst bovenaan de Agenda, van daaruit inplannen) en **opvolging** in logregels (met datum in de agenda, zonder datum op Nog te doen). Lokaal getest: omzetting van een 1.6.1-database (tabel opnieuw opgebouwd, data blijft, twee keer starten gaat goed), punt zonder datum maken, inplannen vanuit de lijst, datum weghalen, opvolging met en zonder datum (POST en PUT), opvolgingen in dialoog en op de kaart, logregel verwijderen laat opvolging staan, sync met Radicale (zonder datum niet verstuurd, datum eraf = afspraak weg, weer ingepland = afspraak terug), telefoonbreedte.
 - 1.8.0: **Pagina per categorie** (documenten: foto's en PDF's; lijst met onderdelen; taken, meetwaarden, logregels; PDF met onderdelen en documenten) en **pagina per systeem** (kaarten van zijn categorieën, logregels). Lokaal getest: upload van foto + PDF tegelijk, ongeldig bestand geweigerd, openen/downloaden PDF, onderdelen toevoegen/volgorde, omschrijving, nieuwe logregel vanaf de pagina, taak/logregel/foto openen, terugknop en browser-terug, directe link na herladen, categorie verwijderen ruimt bestanden op, categorie-PDF, telefoonbreedte.
+- 1.9.0: **Groepen** Casco, Techniek, Interieur, Exterieur boven de systemen, met tabblad Onderhoud › Indeling (groep → systemen → systeempagina). Lokaal getest: omzetting van een 1.8.0-database (kolom `groep` erbij), onbekende groep geweigerd, systeem nieuw in groep, verplaatsen, uit groep halen, groep kiezen bij ✎ en bij toevoegen in Categorieën, terug van systeempagina naar groep, Zonder groep, telefoonbreedte.
 
 ## Niet gedaan / niet getest
 - 1.4.0 **niet getest met echte iCloud/Google, niet in HA en niet in de Docker-build** (nieuwe pakketten `icalendar`, `recurring-ical-events`). Bij Google aangenomen (alleen nep-server): `events/import` zet een eerder verwijderde afspraak terug; PATCH met `null` voor date/dateTime wisselt tussen hele dag en tijd.
@@ -32,6 +33,7 @@
 - Systemen (1.5.0): niet in HA getest; systemen staan (nog) niet in de taak- of logregel-PDF, de dagmail en de agenda-sync.
 - Inloggen (1.6.0): niet getest in HA (ingress, Android-app, localStorage in de HA-webview); lezen is niet afgeschermd op de server (alleen het scherm); geen rechtenverschil tussen gebruikers.
 - Nog te doen/opvolging (1.7.0): niet in HA getest; opvolgingen staan niet in de PDF, de dagmail of de CSV; geen volgorde/prioriteit in de lijst Nog te doen.
+- Groepen (1.9.0): niet in HA getest; groepen staan niet in PDF, CSV of keuzelijsten.
 - Pagina's (1.8.0): niet in HA getest; PDF openen/downloaden in de HA Android-app (webview) is onzeker; geen voorbeeldafbeelding van PDF's; documenten en onderdelen niet in de CSV of dagmail.
 - Module Reizen is nog een lege placeholder. `voorbeeld/` alleen in de werkmap; niet publiceren.
 

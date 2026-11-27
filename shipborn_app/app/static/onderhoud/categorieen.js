@@ -10,7 +10,10 @@ const SEC_DICHT = new Set(['ents']);   // dichtgeklapte onderdelen van de catego
 
 tabblad('cats', {
   toon: pad => catsToon(pad),
-  config: () => { if (HA_ANDROID) $('#docFile').removeAttribute('multiple'); },
+  config: cfg => {
+    if (HA_ANDROID) $('#docFile').removeAttribute('multiple');
+    $('#sysAdd [name=groep]').innerHTML = groepOpties(null, '— groep —');
+  },
   ververs: () => catPagina ? null : loadCats(),
 });
 // de pagina gebruikt TASKS: opnieuw tekenen zodra de taken (opnieuw) geladen zijn, ook na elke wijziging
@@ -77,19 +80,25 @@ const gebruik = x => [als(x.categorieen, meervoud(x.categorieen, 'categorie', 'c
   als(x.documenten, meervoud(x.documenten, 'document', 'documenten')),
   als(x.onderdelen, meervoud(x.onderdelen, 'onderdeel', 'onderdelen'))].filter(Boolean).join(' · ') || 'niet gebruikt';
 
+// groepen (Casco, Techniek, …) komen uit CFG.groepen; zie Onderhoud › Indeling
+const groepOpties = (keuze, eerste = '— geen groep —') => `<option value="">${eerste}</option>` +
+  (CFG.groepen || []).map(g => `<option value="${g.id}"${g.id === keuze ? ' selected' : ''}>${esc(g.naam)}</option>`).join('');
+const groepVan = s => (CFG.groepen || []).find(g => g.id === s?.groep);
+
 const sysRow = (s, i, n) => `
   <div class="card catrow sysrow" data-soort="sys" data-id="${s.id}">
-    <div class="info" data-act="open" title="Pagina van dit systeem openen"><div class="name">${esc(s.naam)}</div><div class="use">Systeem · ${gebruik(s)}</div></div>
+    <div class="info" data-act="open" title="Pagina van dit systeem openen"><div class="name">${esc(s.naam)}</div><div class="use">Systeem${groepVan(s) ? ' in ' + esc(groepVan(s).naam) : ''} · ${gebruik(s)}</div></div>
     <a class="ib pdf" href="api/pdf/systeem/${s.id}" download title="PDF van alle logregels in dit systeem">PDF</a>
     ${knop('up', 'Omhoog', '↑', i === 0 ? 'disabled' : '')}
     ${knop('down', 'Omlaag', '↓', i === n - 1 ? 'disabled' : '')}
-    ${knop('edit', 'Hernoemen', '✎')}
+    ${knop('edit', 'Hernoemen of andere groep', '✎')}
     ${knop('del', 'Verwijderen', '🗑')}
   </div>`;
 
 const sysEditRow = s => `
   <div class="card catrow sysrow bewerk" data-soort="sys" data-id="${s.id}">
     <input value="${esc(s.naam)}" maxlength="60" data-edit aria-label="Naam van het systeem">
+    <select class="syskeuze" data-groep aria-label="Groep">${groepOpties(s.groep || '')}</select>
     ${knop('save', 'Opslaan', '✓')}
     ${knop('cancel', 'Annuleren', '×')}
   </div>`;
@@ -116,7 +125,7 @@ $('#sysAdd').addEventListener('submit', async ev => {
   ev.preventDefault();
   const inp = ev.target.naam;
   try {
-    const r = await api('api/systemen', json('POST', {naam: inp.value}));
+    const r = await api('api/systemen', json('POST', {naam: inp.value, groep: ev.target.groep.value || null}));
     inp.value = ''; toast('Systeem toegevoegd');
     $('#catAdd .syskeuze').value = '';
     await catsChanged();
@@ -138,9 +147,12 @@ async function saveCatEdit(row) {
   const id = +row.dataset.id, naam = $('[data-edit]', row).value.trim();
   try {
     if (row.dataset.soort === 'sys') {
-      await api('api/systemen/' + id, json('PUT', {naam}));
-      catEdit = null; toast('Hernoemd');
-      await catsChanged(true);
+      const s = SYSTEMEN.find(x => x.id === id), groep = $('[data-groep]', row).value || null;
+      const hernoemd = naam !== s.naam;
+      if (hernoemd) await api('api/systemen/' + id, json('PUT', {naam}));
+      if (groep !== (s.groep || null)) await api(`api/systemen/${id}/groep`, json('PUT', {groep}));
+      catEdit = null; toast('Opgeslagen');
+      await catsChanged(hernoemd);
       return;
     }
     const c = CATS.find(x => x.id === id), sel = $('[data-sys]', row);
@@ -205,7 +217,7 @@ $('#cats').addEventListener('click', async ev => {
 });
 
 $('#cats').addEventListener('keydown', ev => {
-  if (!ev.target.matches('[data-edit], [data-sys]')) return;
+  if (!ev.target.matches('[data-edit], [data-sys], [data-groep]')) return;
   if (ev.key === 'Enter') { ev.preventDefault(); saveCatEdit(ev.target.closest('.catrow')); }
   if (ev.key === 'Escape') { ev.preventDefault(); catEdit = null; renderCats(); }
 });
@@ -253,7 +265,9 @@ async function renderSysPagina(s, p) {
   const taken = TASKS.filter(t => namen.includes(t.categorie)), tijd = tijdTotaal(list);
   const el = $('#catPagina');
   el.innerHTML = `
-    ${paginaKop({naam: 'Categorieën', pad: []}, s.naam, 'Systeem', `api/pdf/systeem/${s.id}`)}
+    ${paginaKop(groepVan(s) ? {naam: groepVan(s).naam, pad: ['onderhoud', 'indeling', 'groep', s.groep]}
+      : {naam: 'Categorieën', pad: ['onderhoud', 'cats']}, s.naam,
+      groepVan(s) ? `Systeem in <b>${esc(groepVan(s).naam)}</b>` : 'Systeem (nog geen groep: kies er een met ✎ in de lijst)', `api/pdf/systeem/${s.id}`)}
     ${statsHtml([
       [cats.length, cats.length === 1 ? 'categorie' : 'categorieën'],
       [list.length, list.length === 1 ? 'logregel' : 'logregels'],
@@ -294,7 +308,7 @@ async function renderCatDetail(c, p) {
   const taken = TASKS.filter(t => t.categorie === c.naam), tijd = tijdTotaal(list);
   const el = $('#catPagina');
   el.innerHTML = `
-    ${paginaKop(s ? {naam: s.naam, pad: ['sys', s.id]} : {naam: 'Categorieën', pad: []}, c.naam,
+    ${paginaKop(s ? {naam: s.naam, pad: ['onderhoud', 'cats', 'sys', s.id]} : {naam: 'Categorieën', pad: ['onderhoud', 'cats']}, c.naam,
       s ? `Categorie in systeem <b>${esc(s.naam)}</b>` : 'Categorie', `api/pdf/category/${c.id}`,
       '<button type="button" class="btn primary" data-act="logregel">Nieuwe logregel</button>')}
     ${statsHtml([
@@ -422,7 +436,7 @@ async function ondVerplaats(id, stap) {
 $('#catPagina').addEventListener('click', async ev => {
   const t = ev.target;
   const terug = t.closest('[data-terug]');
-  if (terug) { ga('onderhoud', 'cats', ...terug.dataset.terug.split('/').filter(Boolean)); return; }
+  if (terug) { ga(...terug.dataset.terug.split('/').filter(Boolean)); return; }
   const kaart = t.closest('[data-kaart]');
   if (kaart) { openCatView({soort: 'cat', id: +kaart.dataset.kaart}); return; }
   const tl = t.closest('.pTl');

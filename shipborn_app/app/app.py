@@ -39,7 +39,7 @@ from PIL import Image, ImageOps
 
 import kalender
 
-VERSION = "1.8.0"
+VERSION = "1.9.0"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("shipborn")
@@ -321,6 +321,7 @@ def init_db():
                                 ("tasks", "entiteiten", "TEXT"),
                                 ("categories", "entiteiten", "TEXT"),
                                 ("categories", "systeem_id", "INTEGER REFERENCES systemen(id) ON DELETE SET NULL"),
+                                ("systemen", "groep", "TEXT"),
                                 ("photos", "omschrijving", "TEXT"),
                                 ("photos", "origineel", "TEXT"),
                                 ("entries", "ingevoerd_door", "TEXT"),
@@ -395,9 +396,13 @@ def category_names(conn):
     return [r["naam"] for r in conn.execute("SELECT naam FROM categories ORDER BY volgorde, id")]
 
 
+# Hoofdgroepen boven de systemen (vast): systemen.groep = id, NULL = zonder groep
+GROEPEN = [("casco", "Casco"), ("techniek", "Techniek"), ("interieur", "Interieur"), ("exterieur", "Exterieur")]
+
+
 def systemen_met_categorieen(conn):
-    """[{id, naam, categorieen: [naam, ...]}] in volgorde, voor gegroepeerde keuzelijsten."""
-    out = [dict(r, categorieen=[]) for r in conn.execute("SELECT id, naam FROM systemen ORDER BY volgorde, id")]
+    """[{id, naam, groep, categorieen: [naam, ...]}] in volgorde, voor gegroepeerde keuzelijsten."""
+    out = [dict(r, categorieen=[]) for r in conn.execute("SELECT id, naam, groep FROM systemen ORDER BY volgorde, id")]
     per = {s["id"]: s for s in out}
     for c in conn.execute("SELECT naam, systeem_id FROM categories WHERE systeem_id IS NOT NULL ORDER BY volgorde, id"):
         if c["systeem_id"] in per:
@@ -1081,6 +1086,7 @@ def api_gebruiker_delete(uid):
 MODULES = [
     ("logboek", "Logboek", [("log", "Logboek", ["logboek/logregels"])]),
     ("onderhoud", "Onderhoud", [("tasks", "Taken", ["onderhoud/taken", "onderhoud/stappenplan", "onderhoud/uitvoeren"]),
+                                ("indeling", "Indeling", ["onderhoud/indeling"]),
                                 ("cats", "Categorieën", ["onderhoud/categorieen"])]),
     ("agenda", "Agenda", [("agenda", "Agenda", ["agenda/agenda"])]),
     ("reizen", "Reizen", [("reizen", "Reizen", ["reizen/reizen"])]),
@@ -1163,6 +1169,7 @@ def api_config():
         title=OPT["title"],
         categories=cats,
         systemen=systemen,
+        groepen=[{"id": g, "naam": n} for g, n in GROEPEN],
         uren=[{"id": tid, "naam": naam, "waarde": ha_number(ents[tid]), "ingesteld": bool(ents[tid])}
               for tid, naam, *_ in TELLERS],
         mqtt=bool(MQTT and MQTT.connected),
@@ -2457,7 +2464,7 @@ def systeem_naam_from_json():
 def api_systemen():
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT s.id, s.naam, s.volgorde, "
+            "SELECT s.id, s.naam, s.volgorde, s.groep, "
             "(SELECT COUNT(*) FROM categories c WHERE c.systeem_id = s.id) AS categorieen, "
             "(SELECT COUNT(*) FROM entries e JOIN categories c ON c.naam = e.categorie WHERE c.systeem_id = s.id) "
             "AS logregels, "
@@ -2466,14 +2473,21 @@ def api_systemen():
     return jsonify([dict(r) for r in rows])
 
 
+def groep_from_json():
+    g = text((request.get_json(force=True) or {}).get("groep"))
+    if g and g not in dict(GROEPEN):
+        abort(400, "Onbekende groep")
+    return g
+
+
 @app.post("/api/systemen")
 def api_systeem_create():
-    naam = systeem_naam_from_json()
+    naam, groep = systeem_naam_from_json(), groep_from_json()
     with get_db() as conn:
         if conn.execute("SELECT 1 FROM systemen WHERE naam = ?", (naam,)).fetchone():
             abort(400, f"Systeem '{naam}' bestaat al")
         nxt = conn.execute("SELECT COALESCE(MAX(volgorde), 0) + 1 FROM systemen").fetchone()[0]
-        sid = conn.execute("INSERT INTO systemen (naam, volgorde) VALUES (?, ?)", (naam, nxt)).lastrowid
+        sid = conn.execute("INSERT INTO systemen (naam, volgorde, groep) VALUES (?, ?, ?)", (naam, nxt, groep)).lastrowid
     changed()
     return jsonify(id=sid), 201
 
@@ -2495,6 +2509,16 @@ def api_systeem_rename(sid):
         if conn.execute("SELECT 1 FROM systemen WHERE naam = ? AND id != ?", (naam, sid)).fetchone():
             abort(400, f"Systeem '{naam}' bestaat al")
         if conn.execute("UPDATE systemen SET naam = ? WHERE id = ?", (naam, sid)).rowcount == 0:
+            abort(404, "Systeem niet gevonden")
+    changed()
+    return jsonify(ok=True)
+
+
+@app.put("/api/systemen/<int:sid>/groep")
+def api_systeem_groep(sid):
+    groep = groep_from_json()
+    with get_db() as conn:
+        if conn.execute("UPDATE systemen SET groep = ? WHERE id = ?", (groep, sid)).rowcount == 0:
             abort(404, "Systeem niet gevonden")
     changed()
     return jsonify(ok=True)

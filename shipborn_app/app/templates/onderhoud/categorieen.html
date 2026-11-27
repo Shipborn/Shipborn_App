@@ -4,6 +4,7 @@
   <div id="catsLijst">
     <form class="catadd" id="sysAdd">
       <input name="naam" placeholder="Nieuw systeem, bijv. Koelwater" maxlength="60" required>
+      <select name="groep" class="syskeuze" aria-label="Groep"></select>
       <button class="btn" type="submit">Systeem toevoegen</button>
     </form>
     <form class="catadd" id="catAdd">
@@ -12,7 +13,7 @@
       <button class="btn primary" type="submit">Toevoegen</button>
     </form>
     <div id="cats"></div>
-    <p class="hint">Een systeem bundelt categorieën (bijv. Koelwater: pomp, impeller, warmtewisselaar). Tik op een systeem of categorie om de pagina te openen: bij een systeem zie je al zijn categorieën, bij een categorie de documenten (foto's en PDF's), onderdelen, taken en logregels. Met ✎ hernoem je een categorie of zet je hem in een ander systeem. Bij hernoemen gaan bestaande logregels en taken mee. Bij verwijderen blijven logregels en taken bewaard: een verwijderde categorie laat ze zonder categorie (haar documenten en onderdelen worden wel verwijderd), een verwijderd systeem laat zijn categorieën zonder systeem.</p>
+    <p class="hint">Een systeem bundelt categorieën (bijv. Koelwater: pomp, impeller, warmtewisselaar); elk systeem hoort bij een groep (Casco, Techniek, Interieur of Exterieur, zie Indeling). Tik op een systeem of categorie om de pagina te openen: bij een systeem zie je al zijn categorieën, bij een categorie de documenten (foto's en PDF's), onderdelen, taken en logregels. Met ✎ hernoem je een categorie of zet je hem in een ander systeem. Bij hernoemen gaan bestaande logregels en taken mee. Bij verwijderen blijven logregels en taken bewaard: een verwijderde categorie laat ze zonder categorie (haar documenten en onderdelen worden wel verwijderd), een verwijderd systeem laat zijn categorieën zonder systeem.</p>
   </div>
   {# pagina van één systeem of categorie (#onderhoud/cats/sys/<id> of …/cat/<id>) #}
   <div id="catPagina" hidden></div>

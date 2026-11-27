@@ -91,3 +91,8 @@
 - **Onderdelen als vrije velden** (aantal is tekst: "2", "1 set"), geen voorraadbeheer of koppeling met taken; uit te breiden als dat nodig blijkt.
 - Categorie verwijderen verwijdert haar documenten en onderdelen (logregels en taken blijven, zoals voorheen).
 
+## 2026-11-27 – Groepen boven systemen (1.9.0)
+- **Vaste groepen Casco, Techniek, Interieur, Exterieur** (wens gebruiker), als lijst in de code (`GROEPEN`) en niet als tabel: er komen geen andere bij en zo hoeft er geen beheer voor te komen. Opgeslagen als id (`techniek`) zodat de naam later kan wijzigen.
+- Een systeem hoort bij hoogstens één groep (net als categorie → systeem); zonder groep kan, zodat bestaande systemen gewoon blijven werken.
+- **Eigen tabblad Indeling** in Onderhoud, tussen Taken en Categorieën: Taken blijft het eerste tabblad van Onderhoud. Indeling is de bladerweg (groep → systeem → categorie), Categorieën het beheer.
+

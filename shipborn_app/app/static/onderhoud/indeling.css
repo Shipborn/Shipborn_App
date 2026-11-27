@@ -1,0 +1,16 @@
+/* Onderhoud › Indeling: vier groepen met hun systemen (kaarten gebruiken ook .catgrid/.catkaart uit categorieen.css) */
+.groepgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:10px}
+.groepgrid .card{margin:0}
+.groepkaart{padding:16px}
+.groepkaart .gicoon{font-size:32px;line-height:1}
+.groepkaart h3{font-size:18px;margin:8px 0 4px}
+.groepkaart .use{color:var(--muted);font-size:12px}
+.groepkaart.geen{border-style:dashed}
+.gsys{font-size:13px;margin-top:8px;overflow-wrap:anywhere}
+.kaartkop{display:flex;align-items:flex-start;gap:8px}
+.kaartkop h3{flex:1;min-width:0}
+.kaartkop .ib{width:28px;height:28px;font-size:14px}
+#indSysKies select{flex:1 1 200px;width:auto}
+.gcats{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+#view-indeling > .hint, #indeling > .hint{margin:12px 2px}
+@media (max-width:520px){.groepgrid{grid-template-columns:1fr 1fr}.groepkaart{padding:12px}}
